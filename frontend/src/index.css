@@ -1,1 +1,74 @@
-@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;700;800&display=swap');
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  min-height: 100vh;
+}
+
+/* Card styles */
+.bg-white {
+  background: rgba(255, 255, 255, 0.95) !important;
+  backdrop-filter: blur(10px);
+  border-radius: 20px !important;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3) !important;
+  padding: 2rem !important;
+}
+
+/* Button styles */
+button {
+  font-weight: 600 !important;
+  transition: all 0.3s ease !important;
+}
+
+button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.2);
+}
+
+/* Navbar gradient */
+nav {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+}
+
+/* Table styles */
+table {
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+thead {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%) !important;
+  color: white !important;
+}
+
+tbody tr:hover {
+  background: #f3f4f6 !important;
+}
+
+/* Status badges */
+.bg-green-500 {
+  background: linear-gradient(135deg, #10b981, #059669) !important;
+}
+
+.bg-red-500 {
+  background: linear-gradient(135deg, #ef4444, #dc2626) !important;
+}
+
+.bg-yellow-500 {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+}
+
+/* Input focus */
+input:focus, textarea:focus {
+  border-color: #764ba2 !important;
+  box-shadow: 0 0 0 3px rgba(118, 75, 162, 0.2) !important;
+  outline: none !important;
+}
