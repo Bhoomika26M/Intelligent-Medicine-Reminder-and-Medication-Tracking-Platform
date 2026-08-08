@@ -22,6 +22,9 @@ from app.routes.profile import router as profile_router
 from app.routes.medicine import router as medicine_router
 from app.routes.reminder import router as reminder_router
 from app.routes.history import router as history_router
+from app.routes.notification import router as notification_router
+from app.routes.ocr import router as ocr_router
+from app.routes.refill import router as refill_router
 from app.services.scheduler import start_scheduler, shutdown_scheduler
 from app.services.notification import notifications_queue
 from app.models.role import Role
@@ -47,6 +50,28 @@ async def lifespan(app: FastAPI):
     # Create all SQLAlchemy model tables if they don't exist
     Base.metadata.create_all(bind=engine)
     logger.info("Database tables verified / created.")
+
+    from sqlalchemy import text
+    # Run manual schema updates to prevent migrations crash
+    db = SessionLocal()
+    try:
+        db.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS height VARCHAR(50)"))
+        db.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS weight VARCHAR(50)"))
+        db.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS doctor_name VARCHAR(100)"))
+        db.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS medical_notes TEXT"))
+        db.execute(text("ALTER TABLE profiles ADD COLUMN IF NOT EXISTS caregiver_id INTEGER REFERENCES users(id) ON DELETE SET NULL"))
+        
+        db.execute(text("ALTER TABLE medicines ADD COLUMN IF NOT EXISTS before_food BOOLEAN DEFAULT FALSE"))
+        db.execute(text("ALTER TABLE medicines ADD COLUMN IF NOT EXISTS after_food BOOLEAN DEFAULT FALSE"))
+        db.execute(text("ALTER TABLE medicines ADD COLUMN IF NOT EXISTS disease VARCHAR(100)"))
+        
+        db.commit()
+        logger.info("Database schema manual migrations successfully executed.")
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Manual database migration failed: {e}")
+    finally:
+        db.close()
 
     # Seed default roles: Patient, Caregiver, Admin
     db = SessionLocal()
@@ -186,6 +211,9 @@ app.include_router(reminder_router, prefix="/reminders")    # /reminders (plural
 app.include_router(reminder_router, prefix="/schedule")     # /schedule (alias)
 app.include_router(reminder_router, prefix="/schedules")    # /schedules (alias)
 app.include_router(history_router)                          # /history/*
+app.include_router(notification_router)                     # /notifications (database)
+app.include_router(ocr_router)                               # /ocr/*
+app.include_router(refill_router)                           # /refill/*
 
 
 # ── Health Check ─────────────────────────────────────────────────────────────
@@ -209,20 +237,3 @@ def root():
 def health_check():
     """Kubernetes-style liveness probe / health check."""
     return {"status": "healthy", "service": "PillSync API"}
-
-
-# ── Notifications Endpoint ────────────────────────────────────────────────────
-@app.get("/notifications", tags=["System Notifications"])
-def get_notifications(
-    user_id: int = Query(None, description="Filter notifications by user_id"),
-    current_user: User = Depends(get_current_user),
-):
-    """
-    Returns recent triggered medication push-notification alerts.
-    Automatically filters to the authenticated user's notifications.
-    Optionally filter by a specific user_id (Admin only use-case).
-    """
-    # Always filter to the calling user's notifications for security
-    filter_id = current_user.id
-    user_notifs = [n for n in notifications_queue if n.get("user_id") == filter_id]
-    return user_notifs

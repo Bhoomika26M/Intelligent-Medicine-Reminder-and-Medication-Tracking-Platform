@@ -13,6 +13,7 @@ class Reminder(Base):
     reminder_time = Column(Time, nullable=False)
     status = Column(String(20), default="Pending", nullable=False)  # Pending, Taken, Skipped, Missed
     is_sent = Column(Boolean, default=False, nullable=False)
+    is_enabled = Column(Boolean, default=True, nullable=False)  # Enable/Disable individual reminder
 
     user = relationship("User", back_populates="reminders")
     medicine = relationship("Medicine", back_populates="reminders")

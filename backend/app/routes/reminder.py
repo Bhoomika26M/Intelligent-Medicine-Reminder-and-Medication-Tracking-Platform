@@ -4,16 +4,18 @@ from datetime import date
 from typing import List, Optional
 from app.dependencies import get_db, get_current_user
 from app.models.user import User
-from app.schemas.reminder import ReminderCreate, ReminderResponse, ReminderStatusUpdate
+from app.schemas.reminder import ReminderCreate, ReminderResponse, ReminderStatusUpdate, ReminderToggleUpdate
 from app.crud.reminder import (
     create_reminder,
     get_reminder_by_id,
     get_user_reminders,
     update_reminder_status,
+    toggle_reminder_enabled,
     delete_reminder
 )
 
 router = APIRouter(tags=["Medication Reminders"])
+
 
 @router.post("", response_model=ReminderResponse, status_code=status.HTTP_201_CREATED)
 def schedule_reminder(
@@ -82,6 +84,30 @@ def remove_reminder(
         )
     delete_reminder(db, reminder_id)
     return {"detail": "Reminder deleted successfully"}
+
+
+@router.patch("/{reminder_id}/toggle", response_model=ReminderResponse)
+def toggle_reminder(
+    reminder_id: int,
+    toggle_data: ReminderToggleUpdate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Enable or disable a specific reminder without changing its status."""
+    reminder = get_reminder_by_id(db, reminder_id)
+    if not reminder:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Reminder not found"
+        )
+    if reminder.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to modify this reminder"
+        )
+    updated = toggle_reminder_enabled(db, reminder_id, toggle_data.is_enabled)
+    return updated
+
 
 @router.post("/generate-today", status_code=status.HTTP_200_OK)
 def trigger_generation_for_today(

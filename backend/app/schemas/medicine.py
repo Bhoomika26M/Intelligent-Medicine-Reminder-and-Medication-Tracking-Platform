@@ -10,6 +10,9 @@ class MedicineBase(BaseModel):
     morning: bool = False
     afternoon: bool = False
     night: bool = False
+    before_food: bool = False
+    after_food: bool = False
+    disease: Optional[str] = None
     frequency: str
     instructions: Optional[str] = None
     quantity: int
@@ -30,6 +33,9 @@ class MedicineUpdate(BaseModel):
     morning: Optional[bool] = None
     afternoon: Optional[bool] = None
     night: Optional[bool] = None
+    before_food: Optional[bool] = None
+    after_food: Optional[bool] = None
+    disease: Optional[str] = None
     frequency: Optional[str] = None
     instructions: Optional[str] = None
     quantity: Optional[int] = None

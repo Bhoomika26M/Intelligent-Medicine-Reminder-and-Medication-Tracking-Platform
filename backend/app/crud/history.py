@@ -36,6 +36,14 @@ def create_history_record(db: Session, user_id: int, history_data: HistoryCreate
             
     db.commit()
     db.refresh(db_history)
+
+    # Recalculate refill predictions dynamically
+    try:
+        from app.routes.refill import run_predictions_for_user
+        run_predictions_for_user(db, user_id)
+    except Exception as e:
+        print(f"Failed to run dynamic refill predictions: {e}")
+        
     return db_history
 
 def get_user_history(db: Session, user_id: int, skip: int = 0, limit: int = 100) -> List[MedicationHistory]:

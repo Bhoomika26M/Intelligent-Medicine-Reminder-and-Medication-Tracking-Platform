@@ -1,24 +1,82 @@
 import React, { useState, useEffect } from 'react';
 import api from '../services/api';
+import { toast } from 'react-hot-toast';
 import { 
   FiActivity, 
   FiCheckCircle, 
   FiXCircle, 
   FiMinusCircle, 
-  FiAlertTriangle, 
+  FiAlertTriangle,
+  FiAlertCircle,
   FiClock,
   FiCalendar, 
   FiBarChart2, 
   FiPieChart,
-  FiGrid
+  FiGrid,
+  FiDownload
 } from 'react-icons/fi';
 import { GiPill } from 'react-icons/gi';
+
+// Chart.js integrations
+import { Bar, Doughnut } from 'react-chartjs-2';
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement
+} from 'chart.js';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+  ArcElement
+);
 
 const MedicationHistory = () => {
   const [report, setReport] = useState(null);
   const [historyLogs, setHistoryLogs] = useState([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
+
+  const downloadCSVReport = () => {
+    if (!historyLogs || historyLogs.length === 0) {
+      toast.error('No history data available to download.');
+      return;
+    }
+    try {
+      const headers = ['Date', 'Time', 'Medicine', 'Dosage', 'Status'];
+      const rows = historyLogs.map(log => [
+        log.date,
+        log.time?.substring(0, 5) || '',
+        log.medicine?.name || '',
+        log.medicine?.dosage || '',
+        log.status
+      ]);
+      const csvContent = [headers, ...rows]
+        .map(row => row.map(cell => `"${String(cell).replace(/"/g, '""')}"`).join(','))
+        .join('\n');
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `pillsync_medication_history_${new Date().toISOString().split('T')[0]}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+      toast.success('Medication history report downloaded!');
+    } catch (err) {
+      toast.error('Failed to generate report. Please try again.');
+    }
+  };
 
   useEffect(() => {
     const fetchHistoryData = async () => {
@@ -52,12 +110,95 @@ const MedicationHistory = () => {
   const monthlyReport = report?.monthly_report || [];
   const missedAnalysis = report?.missed_dose_analysis || {};
 
+  // Setup Weekly Chart Data
+  const weeklyLabels = weeklyReport.map(w => w.week_commencing);
+  const weeklyChartData = {
+    labels: weeklyLabels,
+    datasets: [
+      {
+        label: 'Taken',
+        data: weeklyReport.map(w => w.taken || 0),
+        backgroundColor: '#10b981', // Emerald green
+        borderRadius: 4,
+      },
+      {
+        label: 'Skipped',
+        data: weeklyReport.map(w => w.skipped || 0),
+        backgroundColor: '#fbbf24', // Amber/Yellow
+        borderRadius: 4,
+      },
+      {
+        label: 'Missed',
+        data: weeklyReport.map(w => w.missed || 0),
+        backgroundColor: '#ef4444', // Rose red
+        borderRadius: 4,
+      }
+    ]
+  };
+
+  const weeklyChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'top',
+        labels: {
+          boxWidth: 10,
+          font: { family: 'Inter', size: 10, weight: 'bold' },
+        }
+      },
+    },
+    scales: {
+      x: {
+        stacked: true,
+        grid: { display: false },
+        ticks: { font: { family: 'Inter', size: 9 } }
+      },
+      y: {
+        stacked: true,
+        grid: { color: '#f1f5f9' },
+        ticks: { font: { family: 'Inter', size: 9 } }
+      }
+    }
+  };
+
+  // Setup Doughnut Chart Data for Missed Doses by Time Slot
+  const timeSlots = Object.keys(missedAnalysis.by_time_of_day || {});
+  const timeCounts = Object.values(missedAnalysis.by_time_of_day || {});
+  
+  const timeChartData = {
+    labels: timeSlots,
+    datasets: [
+      {
+        data: timeCounts,
+        backgroundColor: ['#60a5fa', '#f59e0b', '#8b5cf6'], // Blue, Orange, Purple
+        borderWidth: 1,
+        borderColor: '#ffffff',
+      }
+    ]
+  };
+
+  const timeChartOptions = {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        position: 'bottom',
+        labels: {
+          boxWidth: 8,
+          font: { family: 'Inter', size: 9, weight: 'bold' }
+        }
+      }
+    },
+    cutout: '70%'
+  };
+
   return (
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-800">Compliance & History</h1>
-        <p className="text-sm text-slate-500 mt-1">Review your historical adherence logs, adherence rates, and weekly compliance reports.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Compliance & History</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-300 mt-1">Review your historical adherence logs, adherence rates, and weekly compliance reports.</p>
       </div>
 
       {errorMsg && (
@@ -73,7 +214,7 @@ const MedicationHistory = () => {
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Adherence Rate</span>
-            <p className="text-3xl font-extrabold text-slate-800 mt-1">{report?.adherence_rate || 0}%</p>
+            <p className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">{report?.adherence_rate || 0}%</p>
             <span className="text-[10px] text-teal-600 font-semibold mt-1.5 inline-flex items-center gap-0.5 bg-teal-50 px-2 py-0.5 rounded-full">
               {report?.adherence_rate >= 90 ? "Excellent" : report?.adherence_rate >= 75 ? "Good" : "Needs Review"}
             </span>
@@ -87,7 +228,7 @@ const MedicationHistory = () => {
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Doses Taken</span>
-            <p className="text-3xl font-extrabold text-slate-800 mt-1">{report?.taken_count || 0}</p>
+            <p className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">{report?.taken_count || 0}</p>
             <span className="text-[10px] text-slate-400 mt-1 block">Total successful treatments</span>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
@@ -99,7 +240,7 @@ const MedicationHistory = () => {
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Doses Skipped</span>
-            <p className="text-3xl font-extrabold text-slate-800 mt-1">{report?.skipped_count || 0}</p>
+            <p className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">{report?.skipped_count || 0}</p>
             <span className="text-[10px] text-slate-400 mt-1 block">Total intentional skips</span>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-amber-50 text-amber-600">
@@ -111,7 +252,7 @@ const MedicationHistory = () => {
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm flex items-center justify-between">
           <div>
             <span className="text-xs font-semibold text-slate-400 uppercase tracking-wider block">Doses Missed</span>
-            <p className="text-3xl font-extrabold text-slate-800 mt-1">{report?.missed_count || 0}</p>
+            <p className="text-3xl font-extrabold text-slate-900 dark:text-white mt-1">{report?.missed_count || 0}</p>
             <span className="text-[10px] text-rose-500 font-semibold mt-1 block">Requires reminder adjustment</span>
           </div>
           <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
@@ -124,53 +265,22 @@ const MedicationHistory = () => {
       <div className="grid gap-6 md:grid-cols-3">
         {/* Weekly Compliance Trend (Bars) */}
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm md:col-span-2 space-y-4">
-          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <FiBarChart2 className="text-blue-500" />
             <span>Weekly Adherence Performance</span>
           </h3>
           {weeklyReport.length === 0 ? (
             <p className="text-sm text-slate-400 text-center py-12">Insufficient data to build trend chart.</p>
           ) : (
-            <div className="space-y-4 pt-2">
-              <div className="flex justify-between text-xs text-slate-400 font-semibold">
-                <span>Week Commencing</span>
-                <span className="flex gap-4">
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-emerald-500" /> Taken</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-amber-400" /> Skipped</span>
-                  <span className="flex items-center gap-1"><span className="h-2 w-2 rounded-full bg-rose-500" /> Missed</span>
-                </span>
-              </div>
-              <div className="space-y-3.5">
-                {weeklyReport.map((w, i) => {
-                  const t = w.taken || 0;
-                  const s = w.skipped || 0;
-                  const m = w.missed || 0;
-                  const tot = t + s + m || 1;
-                  const pctT = (t / tot) * 100;
-                  const pctS = (s / tot) * 100;
-                  const pctM = (m / tot) * 100;
-                  return (
-                    <div key={i} className="space-y-1">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-slate-600">{w.week_commencing}</span>
-                        <span className="font-medium text-slate-500">{t} of {tot} Taken ({Math.round(pctT)}%)</span>
-                      </div>
-                      <div className="flex h-3.5 w-full rounded-full overflow-hidden bg-slate-100">
-                        {t > 0 && <div style={{ width: `${pctT}%` }} className="bg-emerald-500 h-full" />}
-                        {s > 0 && <div style={{ width: `${pctS}%` }} className="bg-amber-400 h-full" />}
-                        {m > 0 && <div style={{ width: `${pctM}%` }} className="bg-rose-500 h-full" />}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+            <div className="h-64 pt-2">
+              <Bar data={weeklyChartData} options={weeklyChartOptions} />
             </div>
           )}
         </div>
 
         {/* Missed Dose Time Analysis */}
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-4">
-          <h3 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <FiPieChart className="text-teal-500" />
             <span>Missed Doses by Time</span>
           </h3>
@@ -181,22 +291,8 @@ const MedicationHistory = () => {
               <p className="text-[10px] mt-0.5">No missed doses on record.</p>
             </div>
           ) : (
-            <div className="space-y-4 pt-2">
-              {Object.entries(missedAnalysis.by_time_of_day || {}).map(([timeSlot, count]) => {
-                const totalMissed = report?.missed_count || 1;
-                const pct = (count / totalMissed) * 100;
-                return (
-                  <div key={timeSlot} className="space-y-1">
-                    <div className="flex justify-between text-xs font-semibold text-slate-600">
-                      <span>{timeSlot}</span>
-                      <span>{count} missed ({Math.round(pct)}%)</span>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
-                      <div style={{ width: `${pct}%` }} className="bg-rose-500 h-full" />
-                    </div>
-                  </div>
-                );
-              })}
+            <div className="h-56 pt-2">
+              <Doughnut data={timeChartData} options={timeChartOptions} />
             </div>
           )}
         </div>
@@ -206,7 +302,7 @@ const MedicationHistory = () => {
       <div className="grid gap-6 md:grid-cols-3">
         {/* Missed Doses by Drug */}
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-4">
-          <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <FiAlertTriangle className="text-rose-500" />
             <span>Missed Doses by Medicine</span>
           </h3>
@@ -226,7 +322,7 @@ const MedicationHistory = () => {
 
         {/* Detailed Timeline History Log */}
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm md:col-span-2 space-y-4">
-          <h3 className="text-base font-bold text-slate-800 flex items-center gap-2">
+          <h3 className="text-base font-bold text-slate-900 dark:text-white flex items-center gap-2">
             <FiGrid className="text-violet-500" />
             <span>Chronological Logs ({historyLogs.length})</span>
           </h3>
@@ -256,7 +352,7 @@ const MedicationHistory = () => {
                       <GiPill />
                     </div>
                     <div>
-                      <h4 className="font-bold text-slate-800">{log.medicine?.name}</h4>
+                      <h4 className="font-bold text-slate-900 dark:text-white">{log.medicine?.name}</h4>
                       <p className="text-[10px] text-slate-400 mt-0.5 flex items-center gap-1.5">
                         <FiCalendar /> {log.date} at <FiClock /> {log.time.substring(0, 5)}
                       </p>

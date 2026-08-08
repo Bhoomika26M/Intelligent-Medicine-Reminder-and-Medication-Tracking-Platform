@@ -20,6 +20,10 @@ class Medicine(Base):
     frequency = Column(String(50), nullable=False)  # e.g., Daily, Weekly, Alternating
     instructions = Column(Text, nullable=True)
     
+    before_food = Column(Boolean, default=False, nullable=False)
+    after_food = Column(Boolean, default=False, nullable=False)
+    disease = Column(String(100), nullable=True)
+    
     quantity = Column(Integer, nullable=False)
     remaining_stock = Column(Integer, nullable=False)
     

@@ -1,184 +1,98 @@
-# 💊 PillSync - AI Intelligent Medicine Reminder and Medication Tracking Platform
+# 💊 PillSync - Intelligent Medicine Reminder and Medication Tracking Platform
 
 ## 📖 Project Description
 
-PillSync is a healthcare web application that helps users remember to take their medicines on time. Users can register, log in, add medicines, set reminder times, and track their medication history.
+PillSync is a comprehensive healthcare platform that assists users in managing their medicine schedules, monitoring dosage adherence, predicting refill requirements, and maintaining medication history using AI-powered tracking and smart notifications.
 
 ---
 
 ## ❗ Problem Statement
 
-Many people forget to take their medicines on time. This may affect their health. PillSync helps users by sending reminders and tracking medicine usage.
+Non-adherence to medication schedules is a critical issue in healthcare, often leading to severe health complications. PillSync mitigates this by providing an intelligent, automated solution for personal healthcare management, family medication tracking, and caregiver monitoring.
 
 ---
 
 ## 🎯 Project Objectives
 
-- Help users take medicines on time.
-- Store medicine details securely.
-- Track medication history.
-- Provide an easy-to-use dashboard.
+- Provide secure authentication and role-based access control (Patient, Caregiver, Admin).
+- Build medicine upload and intelligent medication scheduling workflows.
+- Integrate OCR-based medicine recognition for prescriptions.
+- Implement AI-powered refill prediction and low-stock alert mechanisms.
+- Deliver real-time push, email, and SMS notifications for medication reminders.
+- Deploy a production-ready application using Docker and modern cloud practices.
 
 ---
 
 ## 🛠️ Technology Stack
 
 ### Frontend
-- React.js
-- HTML
-- CSS
-- JavaScript
+- **Framework**: React.js + Vite
+- **Styling**: Tailwind CSS
+- **Routing**: React Router
+- **State Management / API**: Context API / Axios
+- **UI Components**: React Hook Form, Custom Premium Design System
 
 ### Backend
-- Node.js
-- Express.js
+- **Framework**: FastAPI (Python)
+- **Database ORM**: SQLAlchemy
+- **Authentication**: JWT & OAuth2
+- **Validation**: Pydantic
+- **Background Tasks**: APScheduler (cron jobs)
 
 ### Database
-- MySQL
+- **Engine**: PostgreSQL 15
 
-### Tools
-- VS Code
-- Git & GitHub
-- Figma
-- Postman
+### AI & Integrations
+- **OCR Engine**: Tesseract OCR
+- **Notifications**: Firebase Cloud Messaging (FCM), Twilio SMS, Email
 
----
-
-## 🚀 Milestone 1
-
-### ✅ Project Planning
-- Selected the project topic.
-- Planned the project workflow.
-- Defined project features.
-
-### ✅ Database Design
-Database Name:
-```
-pillsync
-```
-
-Planned Tables:
-- users
-- medicines
-- reminders
-- medication_history
-- notifications
-
-### ✅ UI Wireframes
-Designed using Figma.
-
-Pages:
-- Login
-- Register
-- Dashboard
-- Add Medicine
-- Medicine List
-- Profile
-
-### ✅ Development Environment Setup
-Installed:
-- Node.js
-- React
-- MySQL
-- Git
-- VS Code
-- Postman
-
-### ✅ Authentication Planning
-- User Registration
-- User Login
-- Password Hashing
-- JWT Authentication
+### Deployment
+- **Containerization**: Docker & Docker Compose
 
 ---
 
-## 🔄 Project Workflow
+## 🚀 Running the Project (Docker)
 
+To run the complete PillSync stack locally using Docker:
+
+1. Clone the repository and navigate to the root directory.
+2. Ensure you have Docker and Docker Compose installed.
+3. Run the following command:
+
+```bash
+docker-compose up --build -d
 ```
-User
-   ↓
-Register
-   ↓
-Login
-   ↓
-Add Medicine
-   ↓
-Set Reminder
-   ↓
-Receive Reminder
-   ↓
-Mark Medicine as Taken
-   ↓
-Medication History
-```
+
+4. The platform will be available at:
+   - **Frontend**: http://localhost:5173 (or port 80 depending on Docker setup)
+   - **Backend API**: http://localhost:8000
+   - **API Documentation**: http://localhost:8000/docs
 
 ---
 
-## 📁 Folder Structure
+## 🔮 Core Features Implemented (Milestones 1-3)
 
-```
-PillSync/
-│
-├── frontend/
-│
-├── backend/
-│
-├── database/
-│
-├── README.md
-│
-└── package.json
-```
+### Milestone 1: Authentication & Profiles
+- JWT Authentication & OAuth2 Login
+- Role Management (Patient, Caregiver, Admin)
+- Full User Profile & Settings Management
 
----
+### Milestone 2: Medication & Reminders
+- Complete Medicine CRUD (Add, Edit, View, Delete)
+- Dosage Scheduling (Morning, Afternoon, Night, Custom)
+- Reminder System with Push Notifications
+- Medication History Tracking (Taken, Missed, Snoozed)
+- Analytics Dashboard with Adherence Reports
 
-## ✨ Features
-
-- User Registration
-- User Login
-- Add Medicine
-- Edit Medicine
-- Delete Medicine
-- Medicine Reminders
-- Medication History
-- Dashboard
-
----
-
-## 📌 Milestone 1 Deliverables
-
-- Project Scope
-- Problem Statement
-- Technology Stack
-- Database Design
-- UI Wireframes
-- Development Environment Setup
-- Authentication Planning
-
----
-
-## 🔮 Future Work
-
-### Milestone 2
-- Create database tables
-- Develop backend APIs
-- Connect MySQL
-
-### Milestone 3
-- Develop frontend pages
-- Connect frontend with backend
-
-### Milestone 4
-- Testing
-- Bug Fixing
-- Deployment
+### Milestone 3: AI & OCR
+- OCR Medicine Recognition (Image to Data)
+- AI Refill Prediction Engine
+- Low Stock Alerts & Caregiver Notifications
+- Advanced Prediction Dashboard
 
 ---
 
 ## 👩‍💻 Author
 
-**Name:** Mounika
-
-**Department:** B.Tech - Computer Science and Engineering
-
-**Project:** PillSync - AI Intelligent Medicine Reminder and Medication Tracking Platform
+**Name:** Mounika  
+**Project:** PillSync - Intelligent Medicine Reminder and Medication Tracking Platform

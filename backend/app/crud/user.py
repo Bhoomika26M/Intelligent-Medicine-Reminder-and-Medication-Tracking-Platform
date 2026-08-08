@@ -34,7 +34,9 @@ def create_user(db: Session, user_data: UserRegister) -> User:
         profile = Profile(
             user_id=user.id,
             email=user.email,
-            full_name=user.email.split("@")[0].capitalize()
+            full_name=user_data.full_name or "Police Mounika",
+            phone=user_data.phone,
+            profile_image=user_data.profile_image
         )
         db.add(profile)
         db.commit()

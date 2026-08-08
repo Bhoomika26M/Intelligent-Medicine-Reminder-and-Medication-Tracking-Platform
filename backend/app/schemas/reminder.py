@@ -8,6 +8,7 @@ class ReminderBase(BaseModel):
     reminder_time: time
     status: str
     is_sent: bool = False
+    is_enabled: bool = True  # Enable/Disable reminder
 
 class ReminderCreate(BaseModel):
     medicine_id: int
@@ -17,6 +18,9 @@ class ReminderCreate(BaseModel):
 class ReminderStatusUpdate(BaseModel):
     status: str  # Taken, Skipped, Missed, Pending
 
+class ReminderToggleUpdate(BaseModel):
+    is_enabled: bool  # True = enabled, False = disabled
+
 class ReminderResponse(ReminderBase):
     id: int
     user_id: int
@@ -25,3 +29,4 @@ class ReminderResponse(ReminderBase):
 
     class Config:
         from_attributes = True
+

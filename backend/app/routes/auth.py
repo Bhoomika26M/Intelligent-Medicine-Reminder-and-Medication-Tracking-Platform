@@ -127,3 +127,82 @@ def refresh(refresh_token: str, db: Session = Depends(get_db)):
 def logout():
     # Stateless logout is managed by the frontend; API acknowledges success
     return {"detail": "Successfully logged out"}
+
+
+from pydantic import BaseModel, EmailStr
+
+class GoogleLoginRequest(BaseModel):
+    email: EmailStr
+    name: str
+
+@router.post("/google", response_model=Token)
+def google_login(data: GoogleLoginRequest, db: Session = Depends(get_db)):
+    user = get_user_by_email(db, data.email)
+    if not user:
+        from app.schemas.user import UserRegister
+        user_data = UserRegister(
+            email=data.email,
+            password="google_oauth_dummy",
+            role="Patient",
+            full_name=data.name,
+        )
+        user = create_user(db, user_data)
+        
+    access_token = create_access_token(subject=user.id)
+    refresh_token = create_refresh_token(subject=user.id)
+    return Token(access_token=access_token, refresh_token=refresh_token)
+
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    email: EmailStr
+    code: str
+    password: str
+
+# Simple in-memory storage for reset codes
+reset_codes = {}
+
+@router.post("/forgot-password")
+def forgot_password(data: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    user = get_user_by_email(db, data.email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No user registered with this email address."
+        )
+    
+    import random
+    code = f"{random.randint(100000, 999999)}"
+    reset_codes[data.email] = code
+    return {
+        "detail": "Password reset code generated.",
+        "simulated_code": code
+    }
+
+@router.post("/reset-password")
+def reset_password(data: ResetPasswordRequest, db: Session = Depends(get_db)):
+    from app.auth.jwt import hash_password
+    if data.email not in reset_codes or reset_codes[data.email] != data.code:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired verification code."
+        )
+    
+    if len(data.password) < 6:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Password must be at least 6 characters."
+        )
+        
+    user = get_user_by_email(db, data.email)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found."
+        )
+        
+    user.hashed_password = hash_password(data.password)
+    db.commit()
+    reset_codes.pop(data.email, None)
+    return {"detail": "Password has been reset successfully."}

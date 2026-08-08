@@ -5,6 +5,9 @@ class UserRegister(BaseModel):
     email: EmailStr
     password: str
     role: str  # Patient, Caregiver, Admin
+    full_name: Optional[str] = None
+    phone: Optional[str] = None
+    profile_image: Optional[str] = None
 
 class UserLogin(BaseModel):
     email: EmailStr

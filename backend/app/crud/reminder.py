@@ -21,7 +21,8 @@ def create_reminder(db: Session, user_id: int, reminder_data: ReminderCreate) ->
         reminder_date=reminder_data.reminder_date,
         reminder_time=t_parsed,
         status="Pending",
-        is_sent=False
+        is_sent=False,
+        is_enabled=True
     )
     db.add(db_reminder)
     db.commit()
@@ -71,6 +72,16 @@ def update_reminder_status(db: Session, reminder_id: int, new_status: str) -> Re
         
     return reminder
 
+def toggle_reminder_enabled(db: Session, reminder_id: int, is_enabled: bool) -> Reminder:
+    """Enable or disable a specific reminder."""
+    reminder = get_reminder_by_id(db, reminder_id)
+    if not reminder:
+        return None
+    reminder.is_enabled = is_enabled
+    db.commit()
+    db.refresh(reminder)
+    return reminder
+
 def delete_reminder(db: Session, reminder_id: int) -> bool:
     reminder = get_reminder_by_id(db, reminder_id)
     if not reminder:
@@ -78,3 +89,4 @@ def delete_reminder(db: Session, reminder_id: int) -> bool:
     db.delete(reminder)
     db.commit()
     return True
+

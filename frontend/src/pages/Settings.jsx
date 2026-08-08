@@ -21,8 +21,8 @@ const Settings = () => {
     <div className="max-w-4xl mx-auto space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight text-slate-800">Platform Settings</h1>
-        <p className="text-sm text-slate-500 mt-1">Configure your medication alarms, notification channels, and platform preferences.</p>
+        <h1 className="text-3xl font-bold tracking-tight text-slate-900 dark:text-white">Platform Settings</h1>
+        <p className="text-sm text-slate-500 dark:text-slate-300 mt-1">Configure your medication alarms, notification channels, and platform preferences.</p>
       </div>
 
       {successMsg && (
@@ -35,7 +35,7 @@ const Settings = () => {
       <form onSubmit={saveSettings} className="grid gap-6 md:grid-cols-2">
         {/* Card 1: Alarm & Notification Channels */}
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-5">
-          <h3 className="text-lg font-bold text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-50 pb-3 flex items-center gap-2">
             <FiBell className="text-blue-500" />
             <span>Alarms & Notifications</span>
           </h3>
@@ -94,13 +94,13 @@ const Settings = () => {
 
         {/* Card 2: Treatment & Refill Preferences */}
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm space-y-5">
-          <h3 className="text-lg font-bold text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-50 pb-3 flex items-center gap-2">
             <FiSmartphone className="text-teal-500" />
             <span>Refills & Treatment Stock</span>
           </h3>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">
               Low Stock Alert Threshold
             </label>
             <input 
@@ -115,7 +115,7 @@ const Settings = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">
+            <label className="block text-xs font-semibold text-slate-600 dark:text-slate-300 uppercase tracking-wider mb-1">
               Simulated Theme Layout
             </label>
             <div className="flex gap-2 mt-1">
@@ -139,7 +139,7 @@ const Settings = () => {
 
         {/* Card 3: Security & Privacy (Read Only Policy) */}
         <div className="rounded-2xl border border-slate-100 bg-white p-6 shadow-sm md:col-span-2 space-y-4">
-          <h3 className="text-lg font-bold text-slate-800 border-b border-slate-50 pb-3 flex items-center gap-2">
+          <h3 className="text-lg font-bold text-slate-900 dark:text-white border-b border-slate-50 pb-3 flex items-center gap-2">
             <FiShield className="text-violet-500" />
             <span>Security & Privacy Policies</span>
           </h3>
