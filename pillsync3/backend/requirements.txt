@@ -1,0 +1,9 @@
+fastapi
+uvicorn[standard]
+tinydb
+pyjwt
+passlib[bcrypt]
+Pillow
+pytesseract
+apscheduler
+python-multipart
