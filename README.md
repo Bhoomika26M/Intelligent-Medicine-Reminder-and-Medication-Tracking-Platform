@@ -1,1 +1,2 @@
-# Intelligent-Medicine-Reminder-and-Medication-Tracking-Platform
+#Medicine Reminder Platform
+First milestone
