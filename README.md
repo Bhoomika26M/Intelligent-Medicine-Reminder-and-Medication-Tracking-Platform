@@ -1,70 +1,83 @@
-# PillSync
-AI-powered medicine reminder and medication tracking platform for patients, caregivers, and administrators.
+# 💊 PillSync
 
-## Milestone 1 — Completed
+### AI-Powered Medicine Reminder & Medication Tracking Platform
 
-This branch (`milestone-1`) contains the work for Milestone 1. Key features implemented in this milestone:
+PillSync is an intelligent medication management platform designed to help patients, caregivers, and administrators manage medicines, prescriptions, reminders, treatments, notifications, and medication history from a single platform.
 
-- Backend: FastAPI with PostgreSQL (SQLAlchemy)
-	- User registration and login
-	- JWT authentication
-	- Password hashing (bcrypt)
-	- Profile endpoints (fetch, update, change password)
-	- Swagger/OpenAPI docs
-- Frontend: React + Vite
-	- Login, Register UI
-	- Dashboard layout and protected routes
-	- Profile and Settings pages
-	- Axios integration with automatic Authorization header injection
+The platform combines **AI-powered prescription OCR, medicine validation, intelligent reminders, notification management, analytics, and secure authentication** to provide a centralized medication-management experience.
 
-## Local Setup
+---
 
-1. Create and activate virtual environment (backend)
+## 🌟 Overview
 
-```bash
-python -m venv .venv
-source .venv/Scripts/activate   # Windows: .venv\Scripts\activate
-pip install -r backend/requirements.txt
-```
+Managing multiple medicines can become difficult when users need to remember:
 
-2. Configure environment
+- Which medicine to take
+- When to take it
+- How much to take
+- Which medicines belong to which treatment
+- Whether a medicine was taken or missed
+- Upcoming refills
+- Prescription details
+- Medication history
 
-- Copy `.env` with your DB and JWT secrets. Example keys:
+**PillSync** addresses these challenges through an integrated web application that combines medication tracking with AI-assisted prescription processing and an intelligent reminder and notification system.
 
-```
-DATABASE_URL=postgresql://user:password@localhost:5432/pillsync
-SECRET_KEY=your_secret_key
-ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=60
-```
+---
 
-3. Run backend
+# ✨ Key Features
 
-```bash
-cd backend
-python run.py
-```
+## 🔐 Authentication & User Management
 
-4. Run frontend
+- User registration and login
+- Secure password handling
+- JWT-based authentication
+- Protected application routes
+- Profile management
+- Password verification and update functionality
+- Authentication state management on the frontend
 
-```bash
-cd frontend
-npm install
-npm run dev
-```
+---
 
-## How to verify authentication flow
+## 💊 Medicine Management
 
-1. Register a new user via the frontend or POST `/auth/register`.
-2. Login via POST `/auth/login` and confirm you receive an `access_token`.
-3. Use the token to access protected endpoints (e.g., GET `/profile/me`).
-4. Change password via PUT `/profile/change-password`, then confirm:
-	 - You can login with the new password.
-	 - The old password no longer works.
+Users can manage their medications through the platform.
 
-## Notes
+### Features include:
 
-- This branch was created for Milestone 1 and is ready for review. Please open a Pull Request to merge `milestone-1` into `main` and request review from the project mentor.
-- Do not commit secrets (keep `.env` in `.gitignore`).
+- Add medicines
+- View medicines
+- Update medicine information
+- Delete medicines
+- Track dosage information
+- Monitor medication status
+- Medicine validation
+- Medicine database integration
+- Upcoming refill information
+
+---
+
+## 📷 AI-Powered Prescription OCR
+
+PillSync includes an intelligent OCR pipeline for extracting medication information from prescription images.
+
+### OCR Pipeline
+
+```text
+Prescription Image
+        ↓
+Image Preprocessing
+        ↓
+Image Analysis
+        ↓
+OCR Processing
+        ↓
+Medical Text Parsing
+        ↓
+Medicine Recognition
+        ↓
+Medicine Validation
+        ↓
+Structured Medication Data
 
 
