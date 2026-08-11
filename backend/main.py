@@ -73,7 +73,7 @@ SENDGRID_KEY   = os.getenv("SENDGRID_API_KEY", "")
 FROM_EMAIL     = os.getenv("SENDGRID_FROM_EMAIL", os.getenv("FROM_EMAIL", "noreply@pillsync.app"))
 GROQ_API_KEY   = os.getenv("GROQ_API_KEY", "")
 GEMINI_API_KEY = os.getenv("GEMINI_API_KEY", "")
-VAPID_PUBLIC_KEY  = os.getenv("VAPID_PUBLIC_KEY", "BPpyicKy2w0oQU4T2PLf8zpHOJAbsPnJ5zBRWRX0S9sC7G-QKjjsTZ8d0nWrGryIAe6dAN-xj9EoXEquKXmqyt0")
+VAPID_PUBLIC_KEY  = os.getenv("VAPID_PUBLIC_KEY", "")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "")
 VAPID_CLAIMS      = {"sub": "mailto:noreply@pillsync.app"}
 
@@ -190,9 +190,40 @@ async def verify_medicine_name_api(name: str) -> dict:
             except Exception:
                 pass
 
+            # 5. Try Groq LLaMA or Gemini LLM verification as ultimate fallback
+            if GROQ_AVAILABLE and GROQ_API_KEY:
+                try:
+                    from groq import Groq
+                    client = Groq(api_key=GROQ_API_KEY)
+                    sys_prompt = (
+                        "You are a clinical pharmacist assistant. Verify if the provided term is a real medication, "
+                        "active pharmaceutical ingredient, or therapeutic compound (brand name or generic name, "
+                        "including Indian brand names). Reply ONLY with a valid JSON object in this format: "
+                        '{"valid": true/false, "canonical": "Correctly Spelled Name"}'
+                    )
+                    resp = client.chat.completions.create(
+                        model="llama-3.3-70b-versatile",
+                        messages=[
+                            {"role": "system", "content": sys_prompt},
+                            {"role": "user", "content": f"Term: {q}"}
+                        ],
+                        response_format={"type": "json_object"},
+                        timeout=4.0
+                    )
+                    ai_res = json.loads(resp.choices[0].message.content)
+                    if ai_res.get("valid") is True:
+                        result["valid"] = True
+                        result["canonical"] = ai_res.get("canonical") or q.title()
+                        result["suggestions"] = [result["canonical"]]
+                        result["source"] = "groq_llm"
+                        return result
+                except Exception as ex:
+                    logging.warning(f"Groq verification fallback failed: {ex}")
+
     except Exception:
         pass
     return result
+
 
 
 # ══════════════════════════════════════════════════════════
@@ -700,23 +731,30 @@ def send_low_stock_email(to_email: str, patient_name: str, medicine_name: str, c
 def send_web_push(subscription_info: dict, payload_data: dict) -> bool:
     """Send a Web Push notification to a subscribed client browser."""
     if not WEBPUSH_AVAILABLE:
-        logging.info(f"[WEB PUSH] pywebpush unavailable. Would push: {payload_data}")
         return False
     try:
+        priv_key = (VAPID_PRIVATE_KEY or "").replace('\\n', '\n').strip()
+        if not priv_key:
+            return False
+
+        from py_vapid import Vapid
+        vapid_obj = Vapid.from_pem(priv_key.encode('utf-8'))
         webpush(
             subscription_info=subscription_info,
             data=json.dumps(payload_data),
-            vapid_private_key=VAPID_PRIVATE_KEY or "-----BEGIN EC PRIVATE KEY-----\nMHcCAQEEIJlubtxNODKuzG1mYv6o81zLotJ7d4hlYL4/5ntfZiv1oAoGCCqGSM49\nAwEHoUQDQgAE+nKJwrLbDShBThPY8t/zOkc4kBuw+cnnMFFZFfRL2wLsb5AqOOxN\nnx3SdasavIgB7p0A37GP0ShcSq4pearK3Q==\n-----END EC PRIVATE KEY-----\n",
+            vapid_private_key=vapid_obj,
             vapid_claims=VAPID_CLAIMS,
         )
         logging.info("[WEB PUSH] Push alert delivered successfully")
         return True
     except WebPushException as ex:
-        logging.warning(f"[WEB PUSH] Delivery failed: {ex}")
+        logging.debug(f"[WEB PUSH] Subscription delivery result: {ex}")
         return False
     except Exception as ex:
-        logging.error(f"[WEB PUSH] Error sending push: {ex}")
+        logging.debug(f"[WEB PUSH] Push skipped: {ex}")
         return False
+
+
 
 
 def run_refill_warning_check():
@@ -1152,13 +1190,20 @@ def delete_caregiver(
 # ══════════════════════════════════════════════════════════
 
 @app.post("/medicines", tags=["Medicines"])
-def add_medicine(
+async def add_medicine(
     data:       MedicineCreate,
     patient_id: Optional[int] = Query(None),
     db:         Session       = Depends(get_db),
     user:       User          = Depends(get_current_user),
 ):
+    # Validate medicine name
+    if data.name:
+        vres = await verify_medicine_name_api(data.name)
+        if not vres["valid"]:
+            raise HTTPException(400, f"'{data.name}' is not recognized as a valid medicine brand or generic name.")
+            
     target_id = _resolve_target(user, patient_id)
+
     # Parse optional date strings
     start_d = None
     end_d   = None
@@ -1245,7 +1290,7 @@ def history_predict(
 
 
 @app.patch("/medicines/{med_id}", tags=["Medicines"])
-def update_medicine(
+async def update_medicine(
     med_id:     int,
     data:       MedicineUpdate,
     patient_id: Optional[int] = Query(None),
@@ -1256,7 +1301,12 @@ def update_medicine(
     med = db.query(Medicine).filter(Medicine.id == med_id, Medicine.user_id == target_id).first()
     if not med:
         raise HTTPException(404, "Medicine not found")
-    if data.name        is not None: med.name        = data.name
+    if data.name is not None:
+        vres = await verify_medicine_name_api(data.name)
+        if not vres["valid"]:
+            raise HTTPException(400, f"'{data.name}' is not recognized as a valid medicine brand or generic name.")
+        med.name = data.name
+
     if data.description is not None: med.description = data.description
     if data.dosage      is not None: med.dosage      = data.dosage
     if data.category    is not None: med.category    = data.category
@@ -2289,6 +2339,26 @@ def delete_emergency_contact(
     db.delete(contact)
     db.commit()
     return {"success": True, "message": "Emergency contact deleted"}
+
+
+@app.patch("/emergency-contacts/{contact_id}", tags=["Emergency Contacts"])
+def update_emergency_contact(
+    contact_id: int,
+    data:       EmergencyContactCreateSchema,
+    db:         Session = Depends(get_db),
+    user:       User    = Depends(get_current_user)
+):
+    contact = db.query(EmergencyContact).filter(EmergencyContact.id == contact_id, EmergencyContact.user_id == user.id).first()
+    if not contact:
+        raise HTTPException(404, "Emergency contact not found")
+    contact.name = data.name
+    contact.phone = data.phone
+    contact.relation = data.relation
+    contact.email = data.email
+    db.commit()
+    db.refresh(contact)
+    return {"id": contact.id, "name": contact.name, "phone": contact.phone, "relation": contact.relation, "email": getattr(contact, "email", None)}
+
 
 
 # ══════════════════════════════════════════════════════════

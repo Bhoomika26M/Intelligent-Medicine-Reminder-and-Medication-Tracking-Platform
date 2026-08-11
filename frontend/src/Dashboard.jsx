@@ -13,6 +13,40 @@ const fmtDate = (d) => {
 };
 const todayStr = () => fmtDate(new Date());
 
+const parsePhone = (fullPhone) => {
+  if (!fullPhone) return { code: "+91", num: "" };
+  const match = String(fullPhone).match(/^(\+\d{1,4})(\d{10})$/);
+  if (match) {
+    return { code: match[1], num: match[2] };
+  }
+  return { code: "+91", num: String(fullPhone).replace(/\D/g, "").slice(-10) };
+};
+
+const getDefaultTimesForFrequency = (n) => {
+  const count = Math.max(1, Math.min(6, parseInt(n) || 1));
+  const presets = {
+    1: ["08:00 am"],
+    2: ["08:00 am", "08:00 pm"],
+    3: ["08:00 am", "02:00 pm", "08:00 pm"],
+    4: ["08:00 am", "12:00 pm", "04:00 pm", "08:00 pm"],
+    5: ["08:00 am", "11:00 am", "02:00 pm", "05:00 pm", "08:00 pm"],
+    6: ["06:00 am", "09:00 am", "12:00 pm", "03:00 pm", "06:00 pm", "09:00 pm"]
+  };
+  return presets[count] || ["08:00 am"];
+};
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/\-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
+
 // ─── Icons ───────────────────────────────────────────────
 const TabletIcon = ({ c = "w-6 h-6" }) => (
   <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
@@ -80,6 +114,13 @@ const Trash = ({ c = "w-4 h-4" }) => (
     <polyline points="3 6 5 6 21 6" /><path d="M19 6l-1 14H6L5 6" /><path d="M10 11v6" /><path d="M14 11v6" /><path d="M9 6V4h6v2" />
   </svg>
 );
+const EditIcon = ({ c = "w-4 h-4" }) => (
+  <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+    <path d="M18.5 2.5a2.121 2.121 0 1 1 3 3L12 15l-4 1 1-4z" />
+  </svg>
+);
+
 const Bell = ({ c = "w-5 h-5" }) => (
   <svg className={c} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
     <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" /><path d="M13.73 21a2 2 0 0 1-3.46 0" />
@@ -188,6 +229,14 @@ function AmPmTimePicker({ onAdd }) {
   const [ampm, setAmpm] = useState("am");
   const hours = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0"));
   const mins  = Array.from({ length: 60 }, (_, i) => String(i).padStart(2, "0"));
+
+  const handleAdd = () => {
+    onAdd(`${hour}:${min} ${ampm}`);
+    setHour("08");
+    setMin("00");
+    setAmpm("am");
+  };
+
   return (
     <div className="flex flex-wrap items-center gap-2 p-3 bg-gray-50 rounded-2xl border border-gray-100 mb-2">
       <select value={hour} onChange={e => setHour(e.target.value)}
@@ -204,13 +253,14 @@ function AmPmTimePicker({ onAdd }) {
         <option value="am">AM</option>
         <option value="pm">PM</option>
       </select>
-      <button type="button" onClick={() => onAdd(`${hour}:${min} ${ampm}`)}
+      <button type="button" onClick={handleAdd}
         className="ml-auto px-3.5 py-2 rounded-xl bg-[#004346] text-white font-bold text-[10px] uppercase cursor-pointer hover:bg-[#508991] transition-all flex items-center gap-1">
         <Plus c="w-3 h-3" /> Add Time
       </button>
     </div>
   );
 }
+
 
 function scheduleNotificationsForMedicine(med) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
@@ -250,8 +300,24 @@ function AddMedicineModal({ onClose, onSave, token, patientId }) {
   const [error, setError] = useState("");
   const [prediction, setPrediction] = useState(null);
 
-  const addTime = t => { if (!times.includes(t)) setTimes(p => [...p, t].sort()); };
+  const addTime = t => {
+    if (times.length >= frequency) {
+      setError(`Cannot add more than ${frequency} reminder time(s) for a ${frequency}x daily dose.`);
+      return;
+    }
+    setError("");
+    if (!times.includes(t)) setTimes(p => [...p, t].sort());
+  };
   const rmTime  = t => setTimes(p => p.filter(x => x !== t));
+
+  const handleFrequencyChange = n => {
+    setFrequency(n);
+    if (times.length > n) setTimes(prev => prev.slice(0, n));
+  };
+
+
+
+
 
   // Refill estimate: how many days the current stock will last
   const refillEstimate = () => {
@@ -263,8 +329,9 @@ function AddMedicineModal({ onClose, onSave, token, patientId }) {
     const daysLeft = Math.floor(stockNum / (dosesPerDay * doseSize));
     if (daysLeft <= 0) return null;
     const unit = ["liquid","lotion"].includes(form.formulation) ? "ml" : form.formulation === "spray" ? "sprays" : form.formulation === "injection" ? "doses" : "tablet(s)";
-    return `${daysLeft} day(s) supply — ${dosesPerDay}x daily ├ù ${doseSize} ${unit}/dose`;
+    return `${daysLeft} day(s) supply — ${dosesPerDay}x daily x ${doseSize} ${unit}/dose`;
   };
+
 
   const fetchPrediction = async (diseaseName) => {
     if (!diseaseName || diseaseName.trim().length < 3) { setPrediction(null); return; }
@@ -307,7 +374,7 @@ function AddMedicineModal({ onClose, onSave, token, patientId }) {
   const handleSubmit = async e => {
     e.preventDefault();
     if (!form.name.trim()) { setError("Medicine name is required"); return; }
-    if (times.length === 0) { setError("Add at least one reminder time"); return; }
+    if (times.length !== frequency) { setError(`Please add exactly ${frequency} reminder time(s) to match ${frequency}x daily dose.`); return; }
     if (form.category === "Other" && !otherDisease.trim()) { setError("Please specify the condition/disease"); return; }
     setLoading(true);
     try {
@@ -402,7 +469,7 @@ function AddMedicineModal({ onClose, onSave, token, patientId }) {
             <label className="label">Times Per Day</label>
             <div className="flex gap-2">
               {[1,2,3,4].map(n => (
-                <button key={n} type="button" onClick={() => setFrequency(n)}
+                <button key={n} type="button" onClick={() => handleFrequencyChange(n)}
                   className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
                     frequency === n ? "bg-[#004346] text-white border-[#004346] shadow" : "bg-gray-50 text-gray-500 border-gray-100 hover:bg-gray-100"
                   }`}>
@@ -449,13 +516,26 @@ function EditMedicineModal({ medicine, onClose, onSave, token, patientId }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const addTime = t => { if (!times.includes(t)) setTimes(p => [...p, t].sort()); };
+  const addTime = t => {
+    if (times.length >= frequency) {
+      setError(`Cannot add more than ${frequency} reminder time(s) for a ${frequency}x daily dose.`);
+      return;
+    }
+    setError("");
+    if (!times.includes(t)) setTimes(p => [...p, t].sort());
+  };
   const rmTime  = t => setTimes(p => p.filter(x => x !== t));
+
+  const handleFrequencyChange = n => {
+    setFrequency(n);
+    if (times.length > n) setTimes(prev => prev.slice(0, n));
+  };
+
 
   const handleSubmit = async e => {
     e.preventDefault();
     if (!form.name.trim()) { setError("Medicine name is required"); return; }
-    if (times.length === 0) { setError("Add at least one reminder time"); return; }
+    if (times.length !== frequency) { setError(`Please add exactly ${frequency} reminder time(s) to match ${frequency}x daily dose.`); return; }
     setLoading(true);
     try {
       const q = patientId ? `?patient_id=${patientId}` : "";
@@ -530,7 +610,7 @@ function EditMedicineModal({ medicine, onClose, onSave, token, patientId }) {
             <label className="label">Times Per Day</label>
             <div className="flex gap-2">
               {[1,2,3,4].map(n => (
-                <button key={n} type="button" onClick={() => setFrequency(n)}
+                <button key={n} type="button" onClick={() => handleFrequencyChange(n)}
                   className={`flex-1 py-2.5 rounded-xl text-xs font-extrabold transition-all cursor-pointer border ${
                     frequency === n ? "bg-[#004346] text-white border-[#004346] shadow" : "bg-gray-50 text-gray-500 border-gray-100 hover:bg-gray-100"
                   }`}>
@@ -560,9 +640,11 @@ function EditMedicineModal({ medicine, onClose, onSave, token, patientId }) {
 
 // ─── Edit Patient Modal ──────────────────────────────────
 function EditPatientModal({ patient, onClose, onSave, token }) {
+  const initialPhone = parsePhone(patient?.phone);
+  const [countryCode, setCountryCode] = useState(initialPhone.code);
+  const [phoneNum, setPhoneNum] = useState(initialPhone.num);
   const [form, setForm] = useState({
     name:   patient?.name   || "",
-    phone:  patient?.phone  || "",
     gender: patient?.gender || "male",
     age:    patient?.age !== undefined ? String(patient.age) : "",
     weight: patient?.weight ? String(patient.weight).replace(" kg","") : "",
@@ -576,7 +658,7 @@ function EditPatientModal({ patient, onClose, onSave, token }) {
     setLoading(true);
     try {
       const payload = {
-        name: form.name, phone: form.phone||null, gender: form.gender,
+        name: form.name, phone: phoneNum ? `${countryCode}${phoneNum}` : null, gender: form.gender,
         age:    form.age    ? parseInt(form.age)   : null,
         weight: form.weight ? `${form.weight} kg`  : null,
         height: form.height ? `${form.height} cm`  : null,
@@ -603,7 +685,18 @@ function EditPatientModal({ patient, onClose, onSave, token }) {
           <div><label className="label">Full Name *</label>
             <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="input" required/></div>
           <div><label className="label">Phone</label>
-            <input type="tel" pattern="[0-9]{10}" title="Please enter a 10 digit phone number" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} className="input" placeholder="Enter your 10 digit number"/></div>
+            <div className="flex rounded-2xl border border-gray-200 overflow-hidden bg-white">
+              <select value={countryCode} onChange={e=>setCountryCode(e.target.value)} className="px-2 bg-transparent text-xs font-bold border-r border-gray-200 outline-none">
+                <option value="+91">+91</option>
+                <option value="+1">+1</option>
+                <option value="+44">+44</option>
+                <option value="+61">+61</option>
+                <option value="+971">+971</option>
+              </select>
+              <input type="tel" value={phoneNum} onChange={e=>setPhoneNum(e.target.value.replace(/\D/g, "").slice(0, 10))} className="flex-1 px-3 py-2 text-xs outline-none border-none focus:ring-0" placeholder="10 digit number" maxLength={10}/>
+            </div>
+          </div>
+
           <div className="grid grid-cols-2 gap-3">
             <div><label className="label">Gender</label>
               <select value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})} className="input">
@@ -630,7 +723,9 @@ function EditPatientModal({ patient, onClose, onSave, token }) {
 
 // ─── Add Patient Modal (Caregiver) ───────────────────────
 function AddPatientModal({ onClose, onSave, token }) {
-  const [form, setForm] = useState({ name:"", email:"", password:"", phone:"", gender:"female", age:"", weight:"", height:"", blood_group:"" });
+  const [countryCode, setCountryCode] = useState("+91");
+  const [phoneNum, setPhoneNum] = useState("");
+  const [form, setForm] = useState({ name:"", email:"", password:"", gender:"female", age:"", weight:"", height:"", blood_group:"" });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -641,7 +736,7 @@ function AddPatientModal({ onClose, onSave, token }) {
     try {
       const res = await axios.post(`${API}/auth/register`, {
         name: form.name, email: form.email, password: form.password,
-        role: "patient", phone: form.phone || null,
+        role: "patient", phone: phoneNum ? `${countryCode}${phoneNum}` : null,
         gender: form.gender,
         age: form.age ? parseInt(form.age) : null,
         weight: form.weight ? `${form.weight} kg` : null,
@@ -679,7 +774,18 @@ function AddPatientModal({ onClose, onSave, token }) {
           <div><label className="label">Temporary Password *</label>
             <input autoComplete="new-password" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} className="input" placeholder="Min 6 characters" required minLength={6}/></div>
           <div><label className="label">Phone</label>
-            <input autoComplete="off" type="tel" pattern="[0-9]{10}" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} className="input" placeholder="10 digit number"/></div>
+            <div className="flex rounded-2xl border border-gray-200 overflow-hidden bg-white">
+              <select value={countryCode} onChange={e=>setCountryCode(e.target.value)} className="px-2 bg-transparent text-xs font-bold border-r border-gray-200 outline-none">
+                <option value="+91">+91</option>
+                <option value="+1">+1</option>
+                <option value="+44">+44</option>
+                <option value="+61">+61</option>
+                <option value="+971">+971</option>
+              </select>
+              <input autoComplete="off" type="tel" value={phoneNum} onChange={e=>setPhoneNum(e.target.value.replace(/\D/g, "").slice(0, 10))} className="flex-1 px-3 py-2 text-xs outline-none border-none focus:ring-0" placeholder="10 digit number" maxLength={10}/>
+            </div>
+          </div>
+
           <div className="p-4 rounded-2xl bg-[#D6F3F4]/40 border border-[#508991]/15 space-y-3">
             <p className="text-[10px] font-extrabold text-[#004346] uppercase tracking-wide">Health Stats</p>
             <div className="grid grid-cols-2 gap-3">
@@ -706,6 +812,97 @@ function AddPatientModal({ onClose, onSave, token }) {
     </div>
   );
 }
+
+// ─── Edit Emergency Contact Modal ─────────────────────────
+function EditEmergencyContactModal({ contact, onClose, onSave, token }) {
+  const initialPhone = parsePhone(contact?.phone);
+  const [countryCode, setCountryCode] = useState(initialPhone.code);
+  const [phoneNum, setPhoneNum] = useState(initialPhone.num);
+  const [form, setForm] = useState({
+    name: contact?.name || "",
+    email: contact?.email || "",
+    relation: contact?.relation || "Family",
+  });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  const handleSubmit = async e => {
+    e.preventDefault();
+    if (!form.name.trim()) { setError("Name is required"); return; }
+    if (!phoneNum) { setError("Phone number is required"); return; }
+    setLoading(true);
+    try {
+      const res = await axios.patch(`${API}/emergency-contacts/${contact.id}`, {
+        name: form.name,
+        phone: `${countryCode}${phoneNum}`,
+        relation: form.relation,
+        email: form.email || null,
+      }, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      onSave(res.data);
+      onClose();
+    } catch (err) {
+      setError(err.response?.data?.detail || "Failed to update emergency contact");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3">
+      <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md p-6 sm:p-8 max-h-[95vh] overflow-y-auto relative animate-[fadeIn_.2s_ease]">
+        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center cursor-pointer">
+          <X c="w-3.5 h-3.5"/>
+        </button>
+        <h2 className="text-xl font-extrabold text-[#004346] mb-1">Edit Emergency Contact</h2>
+        <p className="text-xs text-gray-400 mb-5">Update details for this emergency contact.</p>
+        {error && (
+          <div className="mb-4 px-4 py-3 bg-red-50 border border-red-100 rounded-2xl text-red-700 text-xs font-semibold flex items-center gap-2">
+            <AlertIcon c="w-4 h-4"/>
+            {error}
+          </div>
+        )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div>
+            <label className="label">Full Name *</label>
+            <input value={form.name} onChange={e=>setForm({...form,name:e.target.value})} className="input" required/>
+          </div>
+          <div>
+            <label className="label">Phone</label>
+            <div className="flex rounded-2xl border border-gray-200 overflow-hidden bg-white">
+              <select value={countryCode} onChange={e=>setCountryCode(e.target.value)} className="px-2 bg-transparent text-xs font-bold border-r border-gray-200 outline-none">
+                <option value="+91">+91</option>
+                <option value="+1">+1</option>
+                <option value="+44">+44</option>
+                <option value="+61">+61</option>
+                <option value="+971">+971</option>
+              </select>
+              <input type="tel" value={phoneNum} onChange={e=>setPhoneNum(e.target.value.replace(/\D/g, "").slice(0, 10))} className="flex-1 px-3 py-2 text-xs outline-none border-none focus:ring-0" placeholder="10 digit number" maxLength={10} required/>
+            </div>
+          </div>
+          <div>
+            <label className="label">Gmail Address</label>
+            <input value={form.email} onChange={e=>setForm({...form,email:e.target.value})} type="email" className="input text-xs" placeholder="gmail@email.com"/>
+          </div>
+          <div>
+            <label className="label">Relation</label>
+            <select value={form.relation} onChange={e=>setForm({...form,relation:e.target.value})} className="input text-xs" required>
+              <option value="Family">Family</option>
+              <option value="Friend">Friend</option>
+              <option value="Consultant/Doctor">Consultant/Doctor</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+          <button type="submit" disabled={loading} className={`w-full py-3.5 rounded-2xl text-white font-bold text-sm cursor-pointer transition-all ${loading?"bg-[#508991]":"bg-[#004346] hover:bg-[#508991]"}`}>
+            {loading ? "Saving..." : "Save Changes"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 
 // ─── Delete Account Warning Modal ─────────────────────────
 function DeleteAccountModal({ onClose, onConfirm, loading }) {
@@ -1078,73 +1275,75 @@ function CaregiverListTab({ token, showToast, addNotif, setEditingPatient }) {
 
 // ─── OCR Upload & AI Prescription Parser Modal (Multi-Medicine) ────────────
 function OcrUploadModal({ onClose, onSave, token, patientId, showToast, addNotif }) {
-  const [file, setFile] = useState(null);
-  const [preview, setPreview] = useState(null);
+  const [files, setFiles] = useState([]);
+  const [previews, setPreviews] = useState([]);
   const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [extractedList, setExtractedList] = useState(null);
-  const [rawText, setRawText] = useState("");
-  const [editingIdx, setEditingIdx] = useState(null);
+  const [isEditingAll, setIsEditingAll] = useState(false);
 
   const handleFileChange = e => {
-    const f = e.target.files[0];
-    if (!f) return;
-    setFile(f);
+    const selected = Array.from(e.target.files);
+    if (selected.length === 0) return;
+    setFiles(prev => [...prev, ...selected]);
     setError("");
-    if (f.type.startsWith("image/")) {
-      setPreview(URL.createObjectURL(f));
-    } else {
-      setPreview(null);
-    }
+    
+    const newPreviews = selected.map(f => f.type.startsWith("image/") ? URL.createObjectURL(f) : null).filter(Boolean);
+    setPreviews(prev => [...prev, ...newPreviews]);
   };
 
   const handleScan = async () => {
-    if (!file) { setError("Please select a prescription photo or document"); return; }
+    if (files.length === 0) { setError("Please select at least one prescription photo or document"); return; }
     setScanning(true);
     setError("");
     try {
-      const formData = new FormData();
-      formData.append("file", file);
-      const res = await axios.post(`${API}/medicines/upload-ocr`, formData, {
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "multipart/form-data"
-        }
-      });
+      let allFormatted = [];
+      let masterIndex = 0;
+      for (const fileItem of files) {
+        const formData = new FormData();
+        formData.append("file", fileItem);
+        const res = await axios.post(`${API}/medicines/upload-ocr`, formData, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "multipart/form-data"
+          }
+        });
 
-      const list = res.data?.medicines || [];
-      setRawText(res.data?.raw_text || "");
-
-      const formatted = list.map((m, idx) => ({
-        id: idx + 1,
-        name: m.name || `Medicine ${idx + 1}`,
-        dosage: m.dosage || "1 tablet",
-        category: m.category || m.disease_name || "Other",
-        disease_name: m.disease_name || m.category || "",
-        stock: m.stock ? String(m.stock) : "10",
-        formulation: m.formulation || "tablet",
-        start_date: m.start_date || todayStr(),
-        end_date: m.end_date || "",
-        times_per_day: m.times_per_day || (m.times ? m.times.length : 1),
-        times: m.times && m.times.length ? m.times : ["08:00 am"],
-        instructions: m.instructions || ""
-      }));
-
-      if (formatted.length === 0) {
-        formatted.push({
-          id: 1, name: "", dosage: "1 tablet", category: "Other", disease_name: "", stock: "10", formulation: "tablet", start_date: todayStr(), end_date: "", times_per_day: 1, times: ["08:00 am"], instructions: ""
+        const list = res.data?.medicines || [];
+        list.forEach((m) => {
+          allFormatted.push({
+            id: ++masterIndex,
+            name: m.name || `Medicine ${masterIndex}`,
+            dosage: m.dosage || "1 tablet",
+            category: m.category || m.disease_name || "Other",
+            disease_name: m.disease_name || m.category || "",
+            stock: m.stock ? String(m.stock) : "10",
+            formulation: m.formulation || "tablet",
+            start_date: m.start_date || todayStr(),
+            end_date: m.end_date || "",
+            times_per_day: m.times_per_day || (m.times ? m.times.length : 1),
+            times: m.times && m.times.length ? m.times : [],
+            instructions: m.instructions || ""
+          });
         });
       }
 
-      setExtractedList(formatted);
-      showToast(`Prescription analyzed! Found ${formatted.length} medication(s).`);
+      if (allFormatted.length === 0) {
+        allFormatted.push({
+          id: 1, name: "", dosage: "1 tablet", category: "Other", disease_name: "", stock: "10", formulation: "tablet", start_date: todayStr(), end_date: "", times_per_day: 1, times: [], instructions: ""
+        });
+      }
+
+      setExtractedList(allFormatted);
+      showToast(`Prescription analyzed! Found ${allFormatted.length} medication(s) in ${files.length} pages.`);
     } catch (err) {
-      setError(err.response?.data?.detail || "Failed to scan prescription image");
+      setError(err.response?.data?.detail || "Failed to scan prescription images");
     } finally {
       setScanning(false);
     }
   };
+
 
   const updateMedicine = (index, key, val) => {
     setExtractedList(prev => {
@@ -1161,15 +1360,25 @@ function OcrUploadModal({ onClose, onSave, token, patientId, showToast, addNotif
   const addEmptyMedicine = () => {
     setExtractedList(prev => [
       ...prev,
-      { id: Date.now(), name: "", dosage: "1 tablet", category: "Other", disease_name: "", stock: "10", formulation: "tablet", start_date: todayStr(), end_date: "", times_per_day: 1, times: ["08:00 am"], instructions: "" }
+      { id: Date.now(), name: "", dosage: "1 tablet", category: "Other", disease_name: "", stock: "10", formulation: "tablet", start_date: todayStr(), end_date: "", times_per_day: 1, times: [], instructions: "" }
     ]);
-    setEditingIdx(extractedList ? extractedList.length : 0);
+    setIsEditingAll(true);
   };
+
 
   const handleSaveAll = async () => {
     if (!extractedList || extractedList.length === 0) { setError("No medicines to save"); return; }
     const invalid = extractedList.find(m => !m.name.trim());
     if (invalid) { setError("All medicines must have a name"); return; }
+
+    for (let i = 0; i < extractedList.length; i++) {
+      const item = extractedList[i];
+      const reqFreq = parseInt(item.times_per_day) || (item.times.length || 1);
+      if (item.times.length !== reqFreq) {
+        setError(`Medicine #${i + 1} (${item.name || 'Unnamed'}): Times Per Day is set to ${reqFreq}, but you have ${item.times.length} reminder time(s). Please add matching reminder times.`);
+        return;
+      }
+    }
 
     setSaving(true);
     setError("");
@@ -1184,7 +1393,7 @@ function OcrUploadModal({ onClose, onSave, token, patientId, showToast, addNotif
           category: item.category || item.disease_name || "Other",
           stock: parseInt(item.stock) || 10,
           formulation: item.formulation || "tablet",
-          schedules: item.times.length ? item.times : ["08:00 am"],
+          schedules: item.times,
           start_date: item.start_date || todayStr(),
           end_date: item.end_date || null,
           description: item.instructions || null
@@ -1230,37 +1439,55 @@ function OcrUploadModal({ onClose, onSave, token, patientId, showToast, addNotif
         {!extractedList ? (
           <div className="space-y-4 my-6">
             <div className="border-2 border-dashed border-gray-200 rounded-2xl p-6 text-center hover:border-[#508991] transition-all bg-gray-50/50">
-              {preview ? (
+              {previews.length > 0 ? (
                 <div className="space-y-3">
-                  <img src={preview} alt="Prescription Preview" className="max-h-52 mx-auto rounded-xl shadow-sm border border-gray-200 object-contain"/>
-                  <p className="text-xs font-bold text-gray-500">{file?.name}</p>
+                  <div className="flex flex-wrap gap-2 justify-center max-h-36 overflow-y-auto">
+                    {previews.map((url, idx) => (
+                      <div key={idx} className="relative group w-20 h-20 border rounded-xl overflow-hidden shadow-xs">
+                        <img src={url} className="w-full h-full object-cover"/>
+                        <button type="button" onClick={() => {
+                          setFiles(p => p.filter((_, i) => i !== idx));
+                          setPreviews(p => p.filter((_, i) => i !== idx));
+                        }} className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white rounded-full flex items-center justify-center text-[10px] font-bold hover:bg-red-600 transition-colors cursor-pointer">
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="text-xs font-bold text-[#004346]">{files.length} prescription file(s) selected</p>
                 </div>
               ) : (
                 <div className="space-y-2 py-6">
                   <svg className="w-12 h-12 text-gray-300 mx-auto" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                  <p className="text-xs font-bold text-[#004346]">Upload prescription photo to extract all medicines</p>
-                  <p className="text-[10px] text-gray-400">Supports JPG, PNG, JPEG formats</p>
+                  <p className="text-xs font-bold text-[#004346]">Upload prescription photo(s) to extract all medicines</p>
+                  <p className="text-[10px] text-gray-400">Supports multi-page prescription images (JPG, PNG, JPEG)</p>
                 </div>
               )}
-              <input type="file" accept="image/*" onChange={handleFileChange} className="mt-3 block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#004346] file:text-white hover:file:bg-[#508991] cursor-pointer"/>
+              <input type="file" accept="image/*" multiple onChange={handleFileChange} className="mt-3 block w-full text-xs text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-xl file:border-0 file:text-xs file:font-bold file:bg-[#004346] file:text-white hover:file:bg-[#508991] cursor-pointer"/>
             </div>
 
-            <button onClick={handleScan} disabled={!file || scanning}
-              className={`w-full py-3.5 rounded-2xl text-white font-bold text-sm cursor-pointer transition-all ${!file || scanning ? "bg-gray-300" : "bg-[#004346] hover:bg-[#508991]"}`}>
-              {scanning ? "Extracting all the medicines..." : "Scan & Extract All Medicines"}
+            <button onClick={handleScan} disabled={files.length === 0 || scanning}
+              className={`w-full py-3.5 rounded-2xl text-white font-bold text-sm cursor-pointer transition-all ${files.length === 0 || scanning ? "bg-gray-300" : "bg-[#004346] hover:bg-[#508991]"}`}>
+              {scanning ? "Extracting all the medicines..." : files.length > 1 ? "Scan & Extract All (Multi-Page)" : "Scan & Extract All Medicines"}
             </button>
           </div>
         ) : (
           <div className="space-y-4 my-4">
-            <div className="flex items-center justify-between p-3.5 bg-teal-50 border border-teal-100 rounded-2xl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-3.5 bg-teal-50 border border-teal-100 rounded-2xl">
               <div className="flex items-center gap-2">
-                <Check c="w-4 h-4 text-teal-600"/>
-                <span className="text-xs font-bold text-[#004346]">Extracted {extractedList.length} medicine(s) from prescription. Edit any item below:</span>
+                <Check c="w-4 h-4 text-teal-600 shrink-0"/>
+                <span className="text-xs font-bold text-[#004346]">Extracted {extractedList.length} medicine(s) from prescription.</span>
               </div>
-              <button type="button" onClick={addEmptyMedicine}
-                className="px-3 py-1.5 rounded-xl bg-[#004346] text-white text-xs font-bold hover:bg-[#508991] transition-all cursor-pointer">
-                + Add Medicine
-              </button>
+              <div className="flex items-center gap-2">
+                <button type="button" onClick={() => setIsEditingAll(!isEditingAll)}
+                  className="px-3 py-1.5 rounded-xl border border-teal-200 text-[#004346] text-xs font-extrabold hover:bg-teal-50 transition-all cursor-pointer">
+                  {isEditingAll ? "Save Changes" : "Edit"}
+                </button>
+                <button type="button" onClick={addEmptyMedicine}
+                  className="px-3 py-1.5 rounded-xl bg-[#004346] text-white text-xs font-bold hover:bg-[#508991] transition-all cursor-pointer">
+                  + Add Medicine
+                </button>
+              </div>
             </div>
 
             {/* List of extracted medicines */}
@@ -1272,21 +1499,15 @@ function OcrUploadModal({ onClose, onSave, token, patientId, showToast, addNotif
                       <span className="text-xs font-extrabold text-[#004346] uppercase">Medicine #{idx + 1}</span>
                       <span className="px-2 py-0.5 rounded-md bg-[#D6F3F4] text-[#004346] text-[10px] font-extrabold uppercase">{item.formulation}</span>
                     </div>
-                    <div className="flex items-center gap-1.5">
-                      <button type="button" onClick={() => setEditingIdx(editingIdx === idx ? null : idx)}
-                        className="px-2.5 py-1 rounded-lg text-xs font-bold border border-teal-200 text-[#004346] hover:bg-teal-50 cursor-pointer">
-                        {editingIdx === idx ? "Collapse" : "Edit"}
+                    {extractedList.length > 1 && (
+                      <button type="button" onClick={() => removeMedicine(idx)}
+                        className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer">
+                        <Trash c="w-4 h-4"/>
                       </button>
-                      {extractedList.length > 1 && (
-                        <button type="button" onClick={() => removeMedicine(idx)}
-                          className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 cursor-pointer">
-                          <Trash c="w-4 h-4"/>
-                        </button>
-                      )}
-                    </div>
+                    )}
                   </div>
 
-                  {editingIdx === idx ? (
+                  {isEditingAll ? (
                     <div className="space-y-3 pt-1">
                       <div>
                         <label className="label">Medicine Name *</label>
@@ -1330,12 +1551,42 @@ function OcrUploadModal({ onClose, onSave, token, patientId, showToast, addNotif
                         </div>
                         <div>
                           <label className="label">Times Per Day</label>
-                          <input type="number" min="1" max="6" value={item.times_per_day} onChange={e => updateMedicine(idx, "times_per_day", e.target.value)} className="input"/>
+                          <input type="number" min="1" max="6" value={item.times_per_day} onChange={e => {
+                            const val = e.target.value;
+                            updateMedicine(idx, "times_per_day", val);
+                            const n = parseInt(val);
+                            if (n > 0 && item.times.length > n) {
+                              updateMedicine(idx, "times", item.times.slice(0, n));
+                            }
+                          }} className="input"/>
                         </div>
                       </div>
                       <div>
-                        <label className="label">Reminder Times (comma separated)</label>
-                        <input value={item.times.join(", ")} onChange={e => updateMedicine(idx, "times", e.target.value.split(",").map(s => s.trim()).filter(Boolean))} className="input" placeholder="08:00 am, 08:00 pm"/>
+                        <label className="label">Reminder Times *</label>
+                        <AmPmTimePicker onAdd={(newTime) => {
+                          const maxAllowed = parseInt(item.times_per_day) || 1;
+                          if (item.times.length >= maxAllowed) {
+                            setError(`Cannot add more than ${maxAllowed} reminder time(s) for a ${maxAllowed}x daily dose on Medicine #${idx + 1}.`);
+                            return;
+                          }
+                          setError("");
+                          if (!item.times.includes(newTime)) {
+                            updateMedicine(idx, "times", [...item.times, newTime].sort());
+                          }
+                        }}/>
+                        {item.times.length > 0 && (
+                          <div className="flex flex-wrap gap-2 mt-2">
+                            {item.times.map(t => (
+                              <span key={t} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-[#004346] text-white text-xs font-bold">
+                                <Clock c="w-3.5 h-3.5"/>{t}
+                                <button type="button" onClick={() => updateMedicine(idx, "times", item.times.filter(x => x !== t))}
+                                  className="ml-1 hover:text-red-300 cursor-pointer">
+                                  <X c="w-3.5 h-3.5"/>
+                                </button>
+                              </span>
+                            ))}
+                          </div>
+                        )}
                       </div>
                       <div>
                         <label className="label">Instructions / Notes</label>
@@ -1365,15 +1616,9 @@ function OcrUploadModal({ onClose, onSave, token, patientId, showToast, addNotif
               ))}
             </div>
 
-            {rawText && (
-              <div>
-                <label className="label">Raw Prescription OCR Output</label>
-                <p className="text-[10px] text-gray-500 font-mono bg-gray-50 p-2.5 rounded-xl border border-gray-100 max-h-20 overflow-y-auto whitespace-pre-wrap">{rawText}</p>
-              </div>
-            )}
 
             <div className="flex items-center gap-3 pt-3">
-              <button type="button" onClick={() => setExtractedList(null)} className="py-3 px-4 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs cursor-pointer">
+              <button type="button" onClick={() => { setExtractedList(null); setFiles([]); setPreviews([]); }} className="py-3 px-4 rounded-2xl bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold text-xs cursor-pointer">
                 Rescan Image
               </button>
               <button type="button" onClick={handleSaveAll} disabled={saving}
@@ -1388,11 +1633,99 @@ function OcrUploadModal({ onClose, onSave, token, patientId, showToast, addNotif
   );
 }
 
+const getFormulationUnit = (formulation) => {
+  const f = (formulation || "").toLowerCase();
+  if (["liquid", "lotion"].includes(f)) return "ml";
+  if (f === "spray") return "sprays";
+  if (f === "injection") return "doses";
+  if (f === "capsule") return "capsules";
+  return "tablets";
+};
+
+function RefillStockModal({ item, onClose, onSave }) {
+  const unit = getFormulationUnit(item.formulation);
+  const [quantity, setQuantity] = useState("30");
+  const [loading, setLoading] = useState(false);
+
+  const num = parseFloat(quantity) || 0;
+  const newTotal = item.current_stock + num;
+  const doseSize = parseFloat(item.dosage) || 1;
+  const dailyCons = item.daily_consumption || 1;
+  const dailyUnits = dailyCons * doseSize;
+  const estDaysLeft = dailyUnits > 0 ? Math.floor(newTotal / dailyUnits) : Math.floor(newTotal);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (num <= 0) return;
+    setLoading(true);
+    try {
+      await onSave(item.medicine_id, item.medicine_name, newTotal, num, "add", unit);
+      onClose();
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-3">
+      <div className="bg-white rounded-[28px] shadow-2xl w-full max-w-md p-6 sm:p-8 max-h-[95vh] overflow-y-auto relative animate-[fadeIn_.2s_ease]">
+        <button onClick={onClose} className="absolute top-4 right-4 w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center cursor-pointer">
+          <X c="w-3.5 h-3.5"/>
+        </button>
+        <div className="flex items-center gap-2 mb-1">
+          <div className="w-8 h-8 rounded-xl bg-[#D6F3F4] text-[#004346] flex items-center justify-center font-bold">
+            <Plus c="w-4 h-4" />
+          </div>
+          <h2 className="text-xl font-extrabold text-[#004346]">Restock Medicine</h2>
+        </div>
+        <p className="text-xs text-gray-400 mb-5">Update stock count for <strong className="text-gray-700">{item.medicine_name}</strong>.</p>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="p-4 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-between text-xs">
+            <div>
+              <span className="text-gray-400 font-semibold block">Current Available Stock</span>
+              <span className="font-extrabold text-[#004346] text-sm">{item.current_stock} {unit}</span>
+            </div>
+            <div className="text-right">
+              <span className="text-gray-400 font-semibold block">Formulation</span>
+              <span className="font-bold text-gray-700 uppercase text-[11px] bg-gray-200/60 px-2 py-0.5 rounded-md">{item.formulation || "tablet"}</span>
+            </div>
+          </div>
+
+          <div>
+            <label className="label">QUANTITY TO ADD ({unit.toUpperCase()}) *</label>
+            <div className="relative">
+              <input type="number" min="1" value={quantity} onChange={e => setQuantity(e.target.value)} className="input text-sm pr-20 font-bold" placeholder="e.g. 30" required />
+              <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-gray-400 uppercase">{unit}</span>
+            </div>
+          </div>
+
+          <div className="p-4 rounded-2xl bg-[#D6F3F4]/50 border border-[#508991]/20 space-y-2 text-xs">
+            <div className="flex justify-between items-center text-gray-600 font-medium">
+              <span>New Total Stock:</span>
+              <span className="font-extrabold text-[#004346] text-sm">{newTotal} {unit}</span>
+            </div>
+            <div className="flex justify-between items-center text-gray-600 font-medium">
+              <span>Re-estimated Supply:</span>
+              <span className="font-extrabold text-[#004346] text-sm">~{estDaysLeft > 0 ? estDaysLeft : 0} day(s)</span>
+            </div>
+          </div>
+
+          <button type="submit" disabled={loading} className={`w-full py-3.5 rounded-2xl text-white font-bold text-sm cursor-pointer transition-all ${loading ? "bg-[#508991]" : "bg-[#004346] hover:bg-[#508991]"}`}>
+            {loading ? "Updating Stock..." : "Confirm Restock"}
+          </button>
+        </form>
+      </div>
+    </div>
+  );
+}
+
 // ─── AI Refill Prediction Engine ─────────────────────────
 function RefillPredictionWidget({ token, patientId, showToast, loadMedicines }) {
   const [predictions, setPredictions] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [refillingId, setRefillingId] = useState(null);
+  const [activeModalItem, setActiveModalItem] = useState(null);
+  const [refillFilter, setRefillFilter] = useState("all");
 
   const fetchPredictions = async () => {
     setLoading(true);
@@ -1411,28 +1744,42 @@ function RefillPredictionWidget({ token, patientId, showToast, loadMedicines }) 
 
   useEffect(() => { fetchPredictions(); }, [patientId]);
 
-  const handleRefillStock = async (medId, medName) => {
-    setRefillingId(medId);
+  const handleConfirmRefill = async (medId, medName, newTotalStock, addedQty, mode, unit) => {
     try {
       const q = patientId ? `?patient_id=${patientId}` : "";
-      await axios.patch(`${API}/medicines/${medId}${q}`, { stock: 30 }, {
+      await axios.patch(`${API}/medicines/${medId}${q}`, { stock: newTotalStock }, {
         headers: { Authorization: `Bearer ${token}` }
       });
-      showToast(`Stock refilled for ${medName} (+30 units)`);
+      showToast(`Stock refilled for ${medName} (+${addedQty} ${unit})`);
       fetchPredictions();
       if (loadMedicines) loadMedicines();
     } catch {
       showToast("Failed to update stock", "error");
-    } finally {
-      setRefillingId(null);
     }
   };
 
   if (loading) return null;
   if (predictions.length === 0) return null;
 
+  const filteredPredictions = predictions.filter(p => {
+    if (refillFilter === "healthy") return p.status === "healthy";
+    if (refillFilter === "refill_recommended") return p.status === "refill_recommended" || p.status === "critical";
+    if (refillFilter === "out_of_stock") return p.status === "out_of_stock";
+    return true;
+  });
+
   return (
     <div className="bg-white p-5 sm:p-6 rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm space-y-4">
+      {activeModalItem && (
+        <RefillStockModal
+          item={activeModalItem}
+          token={token}
+          patientId={patientId}
+          onClose={() => setActiveModalItem(null)}
+          onSave={handleConfirmRefill}
+        />
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-gray-50 pb-3">
         <div>
           <h3 className="font-extrabold text-base text-[#004346] flex items-center gap-2">
@@ -1440,69 +1787,86 @@ function RefillPredictionWidget({ token, patientId, showToast, loadMedicines }) 
           </h3>
           <p className="text-xs text-gray-400 mt-0.5">Automated stock depletion forecasts and recommended refill schedules</p>
         </div>
-        <span className="self-start sm:self-auto px-3 py-1 rounded-xl bg-[#D6F3F4] text-[#004346] text-xs font-extrabold uppercase">
-          AI Active
-        </span>
+        <div className="flex items-center gap-2 self-start sm:self-auto">
+          <select value={refillFilter} onChange={e => setRefillFilter(e.target.value)}
+            className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-xs font-bold text-[#004346] outline-none cursor-pointer">
+            <option value="all">All Predictions</option>
+            <option value="healthy">Full Stock</option>
+            <option value="refill_recommended">Refill Recommendation</option>
+            <option value="out_of_stock">Out of Stock</option>
+          </select>
+          <span className="px-3 py-1 rounded-xl bg-[#D6F3F4] text-[#004346] text-xs font-extrabold uppercase">
+            AI Active
+          </span>
+        </div>
       </div>
 
       {/* Horizontal Multi-Column Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {predictions.map(p => (
-          <div key={p.medicine_id} className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
-            p.status === "out_of_stock" || p.status === "critical" ? "bg-rose-50/70 border-rose-200" :
-            p.status === "refill_recommended" ? "bg-amber-50/70 border-amber-200" : "bg-gray-50/70 border-gray-100"
-          }`}>
-            <div className="space-y-2">
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <p className="font-extrabold text-sm text-[#004346]">{p.medicine_name}</p>
-                    {p.formulation && <span className="px-1.5 py-0.5 rounded-md bg-[#D6F3F4] text-[#004346] text-[9px] font-extrabold uppercase">{p.formulation}</span>}
+      {filteredPredictions.length === 0 ? (
+        <div className="text-center py-8 text-xs font-bold text-gray-400">
+          No refill predictions matching "{refillFilter.replace('_', ' ')}".
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {filteredPredictions.map(p => {
+            const unit = getFormulationUnit(p.formulation);
+            return (
+              <div key={p.medicine_id} className={`p-4 rounded-2xl border transition-all flex flex-col justify-between ${
+                p.status === "out_of_stock" || p.status === "critical" ? "bg-rose-50/70 border-rose-200" :
+                p.status === "refill_recommended" ? "bg-amber-50/70 border-amber-200" : "bg-gray-50/70 border-gray-100"
+              }`}>
+                <div className="space-y-2">
+                  <div className="flex items-start justify-between gap-2">
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <p className="font-extrabold text-sm text-[#004346]">{p.medicine_name}</p>
+                        {p.formulation && <span className="px-1.5 py-0.5 rounded-md bg-[#D6F3F4] text-[#004346] text-[9px] font-extrabold uppercase">{p.formulation}</span>}
+                      </div>
+                      <p className="text-[11px] text-[#508991] font-semibold mt-0.5">{p.category}</p>
+                    </div>
+                    <span className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold uppercase whitespace-nowrap ${
+                      p.status === "out_of_stock" || p.status === "critical" ? "bg-rose-600 text-white shadow-xs" :
+                      p.status === "refill_recommended" ? "bg-amber-600 text-white shadow-xs" : "bg-emerald-100 text-emerald-800"
+                    }`}>
+                      {p.status_label}
+                    </span>
                   </div>
-                  <p className="text-[11px] text-[#508991] font-semibold mt-0.5">{p.category}</p>
-                </div>
-                <span className={`px-2.5 py-1 rounded-xl text-[10px] font-extrabold uppercase whitespace-nowrap ${
-                  p.status === "out_of_stock" || p.status === "critical" ? "bg-rose-600 text-white shadow-xs" :
-                  p.status === "refill_recommended" ? "bg-amber-600 text-white shadow-xs" : "bg-emerald-100 text-emerald-800"
-                }`}>
-                  {p.status_label}
-                </span>
-              </div>
 
-              <div className="space-y-1 text-xs font-medium text-gray-600 border-t border-gray-200/50 pt-2">
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Current Stock:</span>
-                  <span className="font-extrabold text-[#004346] text-xs">{p.current_stock} units</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Est. Depletion:</span>
-                  <span className="font-extrabold text-gray-800 text-xs">{p.depletion_date.includes('(') || p.depletion_date.includes('Depleted') ? p.depletion_date : `${p.depletion_date} (${p.days_remaining}d left)`}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-gray-500">Recommended Refill:</span>
-                  <span className={`font-extrabold text-xs ${p.recommended_refill_date.includes('Immediate') ? 'text-rose-600 font-black' : 'text-[#508991]'}`}>{p.recommended_refill_date}</span>
-                </div>
-              </div>
+                  <div className="space-y-1 text-xs font-medium text-gray-600 border-t border-gray-200/50 pt-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Current Stock:</span>
+                      <span className="font-extrabold text-[#004346] text-xs">{p.current_stock} {unit}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Est. Depletion:</span>
+                      <span className="font-extrabold text-gray-800 text-xs">{p.depletion_date.includes('(') || p.depletion_date.includes('Depleted') ? p.depletion_date : `${p.depletion_date} (${p.days_remaining}d left)`}</span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-gray-500">Recommended Refill:</span>
+                      <span className={`font-extrabold text-xs ${p.recommended_refill_date.includes('Immediate') ? 'text-rose-600 font-black' : 'text-[#508991]'}`}>{p.recommended_refill_date}</span>
+                    </div>
+                  </div>
 
-              {/* Progress bar */}
-              <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden my-2">
-                <div className={`h-full rounded-full transition-all ${
-                  p.days_remaining <= 2 ? "bg-rose-600" : p.days_remaining <= 5 ? "bg-amber-500" : "bg-[#004346]"
-                }`} style={{ width: `${Math.min(100, (p.current_stock / 30) * 100)}%` }}/>
-              </div>
-            </div>
+                  {/* Progress bar */}
+                  <div className="w-full bg-gray-200 h-2 rounded-full overflow-hidden my-2">
+                    <div className={`h-full rounded-full transition-all ${
+                      p.days_remaining <= 2 ? "bg-rose-600" : p.days_remaining <= 5 ? "bg-amber-500" : "bg-[#004346]"
+                    }`} style={{ width: `${Math.min(100, (p.current_stock / (p.daily_consumption * 14 || 30)) * 100)}%` }}/>
+                  </div>
+                </div>
 
-            <button onClick={() => handleRefillStock(p.medicine_id, p.medicine_name)} disabled={refillingId === p.medicine_id}
-              className="w-full mt-3 py-2 rounded-xl bg-white border border-gray-200 hover:border-[#004346] text-[#004346] font-extrabold text-xs transition-all shadow-xs cursor-pointer">
-              {refillingId === p.medicine_id ? "Updating..." : "Refill Stock (+30 units)"}
-            </button>
-          </div>
-        ))}
-      </div>
+                <button onClick={() => setActiveModalItem(p)}
+                  className="w-full mt-3 py-2.5 rounded-xl bg-[#004346] hover:bg-[#508991] text-white font-bold text-xs transition-all shadow-xs cursor-pointer flex items-center justify-center gap-1.5">
+                  <Plus c="w-3.5 h-3.5"/> Restock Medicine
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
-
 
 // ─── Medication Adherence Analytics Component ─────────────
 function AdherenceAnalytics({ token, patientId }) {
@@ -1589,6 +1953,53 @@ export default function Dashboard() {
 
   const role = user?.role || "patient";
 
+  const registerPushNotifications = useCallback(async () => {
+    if (!token) return;
+    if (!("serviceWorker" in navigator) || !("PushManager" in window)) {
+      console.log("Push notifications not supported by browser");
+      return;
+    }
+    try {
+      const reg = await navigator.serviceWorker.register("/service-worker.js");
+      const permission = await Notification.requestPermission();
+      if (permission !== "granted") {
+        console.log("Notification permission denied");
+        return;
+      }
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        let vapidPublicKey = "";
+        try {
+          const keyRes = await axios.get(`${API}/notifications/vapid-key`);
+          vapidPublicKey = keyRes.data?.public_key || "";
+        } catch {}
+        if (!vapidPublicKey) return;
+        const convertedKey = urlBase64ToUint8Array(vapidPublicKey);
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: convertedKey
+        });
+      }
+      const subInfo = sub.toJSON();
+      const payload = {
+        endpoint: subInfo.endpoint,
+        p256dh: subInfo.keys?.p256dh,
+        auth: subInfo.keys?.auth
+      };
+      await axios.post(`${API}/notifications/subscribe`, payload, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      console.log("Subscribed to push notifications successfully!");
+    } catch (err) {
+      console.warn("Failed to subscribe push notifications:", err);
+    }
+  }, [token]);
+
+  useEffect(() => {
+    registerPushNotifications();
+  }, [registerPushNotifications]);
+
+
   const [tab,        setTab]        = useState(() => localStorage.getItem("pillsync_active_tab") || "overview");
   const [tabHistory, setTabHistory] = useState([localStorage.getItem("pillsync_active_tab") || "overview"]);
   const goTo = t => { setTab(t); setTabHistory(h => [...h, t]); localStorage.setItem("pillsync_active_tab", t); };
@@ -1604,12 +2015,15 @@ export default function Dashboard() {
   const [showAddPatient,   setShowAddPatient]   = useState(false);
   const [editingMedicine,  setEditingMedicine]  = useState(null);
   const [editingPatient,   setEditingPatient]   = useState(null);
+  const [editingContact,   setEditingContact]   = useState(null);
   const [deleteConfirm,           setDeleteConfirm]           = useState(null);
   const [showDeleteAccountModal,  setShowDeleteAccountModal]  = useState(false);
   const [deleteAccountLoading,    setDeleteAccountLoading]    = useState(false);
   const [progressSubTab,          setProgressSubTab]          = useState("chart");
   const [globalMedSearch,         setGlobalMedSearch]         = useState("");
   const [searchDropdownOpen,      setSearchDropdownOpen]      = useState(false);
+  const [historyFilter,           setHistoryFilter]           = useState("all");
+
 
   // AI Assistant states
   const [aiMessages, setAiMessages] = useState([]);
@@ -1617,17 +2031,22 @@ export default function Dashboard() {
   const [aiLoading, setAiLoading] = useState(false);
   const [aiChatOpen, setAiChatOpen] = useState(false);
 
-  // Emergency Contacts state persisted in localStorage
-  const [emergencyContacts, setEmergencyContacts] = useState(() => {
+  const [emergencyContacts, setEmergencyContacts] = useState([]);
+
+  const loadEmergencyContacts = useCallback(async () => {
+    if (!token) return;
     try {
-      const saved = localStorage.getItem("pillsync_emergency_contacts");
-      return saved ? JSON.parse(saved) : [];
-    } catch { return []; }
-  });
+      const res = await axios.get(`${API}/emergency-contacts`, {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      setEmergencyContacts(res.data);
+    } catch {}
+  }, [token]);
 
   useEffect(() => {
-    localStorage.setItem("pillsync_emergency_contacts", JSON.stringify(emergencyContacts));
-  }, [emergencyContacts]);
+    loadEmergencyContacts();
+  }, [loadEmergencyContacts]);
+
 
   // Floating AI Chatbot auto-scroll ref and effect
   const floatingChatEndRef = useRef(null);
@@ -1652,16 +2071,22 @@ export default function Dashboard() {
   const [medLoading,  setMedLoading]  = useState(false);
   const [histLoading, setHistLoading] = useState(false);
 
+  const initialProfilePhone = parsePhone(user?.phone);
+  const [profileCountryCode, setProfileCountryCode] = useState(initialProfilePhone.code);
+  const [profilePhoneNum, setProfilePhoneNum] = useState(initialProfilePhone.num);
   const [profileForm, setProfileForm] = useState({
-    name: user?.name||"", phone: user?.phone||"", gender: user?.gender||"male",
+    name: user?.name||"", gender: user?.gender||"male",
     age:    user?.age||"",
     weight: user?.weight ? String(user.weight).replace(" kg","") : "",
     height: user?.height ? String(user.height).replace(" cm","") : "",
     blood_group: user?.blood_group||"",
   });
-  const [pwForm,      setPwForm]      = useState({ old_password:"", new_password:"", confirm_password:"" });
+
+  const [pwForm,      setPwForm]      = useState({ new_password:"", confirm_password:"", code:"" });
+  const [codeCooldown, setCodeCooldown] = useState(0);
   const [profLoading, setProfLoading] = useState(false);
   const [pwLoading,   setPwLoading]   = useState(false);
+
 
   const handleDeleteOwnAccount = async () => {
     setDeleteAccountLoading(true);
@@ -1707,13 +2132,18 @@ export default function Dashboard() {
   const unreadCount  = notifications.length;
 
   useEffect(() => {
-    if (user) setProfileForm({
-      name: user.name||"", phone: user.phone||"", gender: user.gender||"male",
-      age:    user.age||"",
-      weight: user.weight ? String(user.weight).replace(" kg","") : "",
-      height: user.height ? String(user.height).replace(" cm","") : "",
-      blood_group: user.blood_group||"",
-    });
+    if (user) {
+      setProfileForm({
+        name: user.name||"", gender: user.gender||"male",
+        age:    user.age||"",
+        weight: user.weight ? String(user.weight).replace(" kg","") : "",
+        height: user.height ? String(user.height).replace(" cm","") : "",
+        blood_group: user.blood_group||"",
+      });
+      const parsed = parsePhone(user.phone);
+      setProfileCountryCode(parsed.code);
+      setProfilePhoneNum(parsed.num);
+    }
   }, [user]);
 
   const effectivePatientId = ["caregiver","admin"].includes(role) ? selectedPatientId : null;
@@ -1977,7 +2407,7 @@ export default function Dashboard() {
     if (!profileForm.name.trim()) { showToast("Name cannot be empty","error"); return; }
     setProfLoading(true);
     try {
-      const payload = { name:profileForm.name, phone:profileForm.phone||null };
+      const payload = { name:profileForm.name, phone:profilePhoneNum ? `${profileCountryCode}${profilePhoneNum}` : null };
       if (role === "patient") {
         payload.gender = profileForm.gender;
         payload.age    = profileForm.age ? parseInt(profileForm.age) : null;
@@ -1996,20 +2426,45 @@ export default function Dashboard() {
     finally { setProfLoading(false); }
   };
 
+  const handleSendPasswordCode = async () => {
+    if (!user?.email) return;
+    try {
+      await axios.post(`${API}/auth/send-code`, {
+        email: user.email,
+        purpose: "change_password"
+      });
+      showToast("Verification code sent to your email!");
+      setCodeCooldown(60);
+      const timer = setInterval(() => {
+        setCodeCooldown(c => {
+          if (c <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return c - 1;
+        });
+      }, 1000);
+    } catch (err) {
+      showToast(err.response?.data?.detail || "Failed to send code", "error");
+    }
+  };
+
   const handlePwChange = async e => {
     e.preventDefault();
     if (pwForm.new_password !== pwForm.confirm_password) { showToast("Passwords don't match","error"); return; }
+    if (!pwForm.code) { showToast("Please enter the verification code", "error"); return; }
     setPwLoading(true);
     try {
-      await axios.patch(`${API}/users/password`,
-        { old_password:pwForm.old_password, new_password:pwForm.new_password },
+      await axios.post(`${API}/users/change-password-with-code`,
+        { code: pwForm.code, new_password: pwForm.new_password },
         { headers: { Authorization: `Bearer ${token}` } });
       showToast("Password changed!");
       addNotif("Your account password has been changed successfully.", "success", "Password Updated");
-      setPwForm({old_password:"",new_password:"",confirm_password:""});
+      setPwForm({new_password:"",confirm_password:"",code:""});
     } catch (err) { showToast(err.response?.data?.detail || "Failed","error"); }
     finally { setPwLoading(false); }
   };
+
 
   const getWeekDays = (offset=0) => {
     const today = new Date(); const start = new Date(today);
@@ -2111,6 +2566,18 @@ export default function Dashboard() {
       {editingPatient && <EditPatientModal patient={editingPatient} token={token} onClose={()=>setEditingPatient(null)} onSave={()=>{loadPatients();loadSchedule();showToast("Patient updated!");addNotif(`Patient "${editingPatient.name}" vitals updated.`,"success");}}/>}
       {showAddPatient && <AddPatientModal token={token} onClose={()=>setShowAddPatient(false)} onSave={(newPatient)=>{loadPatients(newPatient?.id);showToast("Patient account created!");addNotif("New patient account created successfully.","success","Patient Added");}}/>}
       {showDeleteAccountModal && <DeleteAccountModal onClose={() => setShowDeleteAccountModal(false)} onConfirm={handleDeleteOwnAccount} loading={deleteAccountLoading} />}
+      {editingContact && (
+        <EditEmergencyContactModal 
+          contact={editingContact} 
+          token={token} 
+          onClose={() => setEditingContact(null)} 
+          onSave={(updated) => {
+            setEmergencyContacts(prev => prev.map(c => c.id === updated.id ? updated : c));
+            showToast("Emergency contact updated!");
+          }}
+        />
+      )}
+
 
       {/* ── NAVBAR ── */}
       <nav className="sticky top-0 z-40 bg-white/90 backdrop-blur-md border-b border-gray-100 px-4 sm:px-6 lg:px-10 py-3 flex items-center justify-between shadow-sm">
@@ -2262,14 +2729,14 @@ export default function Dashboard() {
       {/* Close notification drawer on outside click */}
       {notifOpen && <div className="fixed inset-0 z-30" onClick={() => setNotifOpen(false)}/>}
 
-      <div className="flex min-h-[calc(100vh-64px)]">
+      <div className="flex h-[calc(100vh-65px)] overflow-hidden w-full">
         {/* ── LEFT SIDEBAR ── */}
-        <aside className="hidden md:flex flex-col w-[180px] shrink-0 bg-white border-r border-gray-100 px-3 py-6 gap-1">
+        <aside className="hidden md:flex flex-col w-[180px] shrink-0 bg-white border-r border-gray-100 px-3 py-4 gap-0.5 h-full overflow-y-auto">
           <p className="text-[9px] font-extrabold text-gray-400 uppercase tracking-widest px-3 mb-2">Navigation</p>
           {[
             {key:"overview",label:"Overview",icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>},
             {key:"medicines",label:role==="patient"?"My Medicines":"Medicines",icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z"/></svg>},
-            ...(["caregiver","admin"].includes(role)?[{key:"patients",label:"Patients",icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>}]:[]),
+            ...(["caregiver","admin"].includes(role)?[{key:"patients",label:"Patients",icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"/></svg>}]:[]),
             ...(role==="admin"?[{key:"caregivers",label:"Caregivers",icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>}]:[]),
             {key:"progress",label:"Progress",icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>},
             {key:"refill",label:"Refill Predictor",icon:<svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>},
@@ -2283,7 +2750,7 @@ export default function Dashboard() {
               {icon}{label}
             </button>
           ))}
-          <div className="mt-auto pt-4 border-t border-gray-100 space-y-1.5">
+          <div className="mt-auto pt-4 border-t border-gray-100 space-y-1.5 shrink-0">
             {(role==="patient"||(["caregiver","admin"].includes(role)&&effectivePatientId)) && (
               <>
                 <button onClick={()=>setShowAdd(true)} className="flex items-center gap-2 w-full px-3 py-2.5 rounded-xl bg-[#004346] hover:bg-[#508991] text-white text-xs font-bold transition-all cursor-pointer"><Plus c="w-4 h-4"/>Add Medicine</button>
@@ -2298,33 +2765,36 @@ export default function Dashboard() {
         </aside>
 
         {/* ── MAIN CONTENT ── */}
-        <div className="flex-1 max-w-[1200px] mx-auto px-3 sm:px-4 lg:px-6 py-5 sm:py-8">
+        <div className="flex-1 h-full overflow-y-auto px-3 sm:px-4 lg:px-6 py-5 sm:py-8">
+          <div className="max-w-[1200px] mx-auto w-full">
+
 
         {/* ── PATIENT VITALS BANNER ── */}
         {vitalsPatient && (
-          <div className="mb-5 sm:mb-7 p-4 sm:p-6 rounded-[24px] bg-gradient-to-r from-[#004346] to-[#508991] text-white shadow-xl relative overflow-hidden">
-            <div className="absolute right-0 top-0 w-40 h-40 bg-white/5 rounded-full -translate-y-12 translate-x-12 pointer-events-none"/>
+          <div className="mb-4 p-3 sm:p-4 rounded-2xl bg-gradient-to-r from-[#004346] to-[#508991] text-white shadow-lg relative overflow-hidden">
+            <div className="absolute right-0 top-0 w-32 h-32 bg-white/5 rounded-full -translate-y-12 translate-x-12 pointer-events-none"/>
             <div className="relative z-10 flex flex-col sm:flex-row sm:items-center gap-4">
               <div className="flex items-center gap-3 sm:gap-4 flex-1">
-                <div className="w-12 h-12 bg-white/15 rounded-2xl flex items-center justify-center font-extrabold text-2xl uppercase border border-white/10 shrink-0">{vitalsPatient.name?.slice(0,1)}</div>
+                <div className="w-10 h-10 bg-white/15 rounded-xl flex items-center justify-center font-extrabold text-xl uppercase border border-white/10 shrink-0">{vitalsPatient.name?.slice(0,1)}</div>
                 <div>
-                  <p className="text-[10px] font-extrabold text-[#74B3CE] uppercase tracking-wider">Patient Vitals</p>
-                  <h2 className="text-lg sm:text-xl font-extrabold leading-snug">{vitalsPatient.name}</h2>
-                  <p className="text-xs text-white/75">{vitalsPatient.email}{vitalsPatient.phone ? ` • ${vitalsPatient.phone}` : ""}</p>
+                  <p className="text-[9px] font-extrabold text-[#74B3CE] uppercase tracking-wider">Patient Vitals</p>
+                  <h2 className="text-base sm:text-lg font-extrabold leading-tight">{vitalsPatient.name}</h2>
+                  <p className="text-[11px] text-white/75">{vitalsPatient.email}{vitalsPatient.phone ? ` • ${vitalsPatient.phone}` : ""}</p>
                 </div>
               </div>
-              <div className="grid grid-cols-5 gap-2 sm:gap-3 bg-black/15 p-3 sm:p-4 rounded-2xl border border-white/5 flex-1 sm:max-w-xs lg:max-w-sm">
+              <div className="grid grid-cols-5 gap-1.5 sm:gap-2.5 bg-black/15 p-2 sm:p-3 rounded-xl border border-white/5 flex-1 sm:max-w-md lg:max-w-lg">
                 {[["Gender",vitalsPatient.gender||"—","capitalize"],["Age",vitalsPatient.age?`${vitalsPatient.age} yrs`:"—"],["Weight",vitalsPatient.weight||"—"],["Height",vitalsPatient.height||"—"],["Blood Group",vitalsPatient.blood_group||"—"]].map(([l,v,ex])=>(
-                  <div key={l}><p className="text-[9px] font-extrabold text-[#74B3CE] uppercase">{l}</p><p className={`text-xs sm:text-sm font-bold ${ex||""}`}>{v}</p></div>
+                  <div key={l}><p className="text-[8px] sm:text-[9px] font-extrabold text-[#74B3CE] uppercase tracking-wider whitespace-nowrap">{l}</p><p className={`text-xs font-bold ${ex||""}`}>{v}</p></div>
                 ))}
               </div>
               <button onClick={()=>role==="patient"?goTo("settings"):setEditingPatient(vitalsPatient)}
-                className="self-start sm:self-auto px-3 py-2 bg-white text-[#004346] hover:bg-[#74B3CE] hover:text-white rounded-xl text-xs font-extrabold transition-all shadow flex items-center gap-1.5 shrink-0 cursor-pointer">
-                <Edit c="w-3.5 h-3.5"/> Edit Vitals
+                className="self-start sm:self-auto px-2.5 py-1.5 bg-white text-[#004346] hover:bg-[#74B3CE] hover:text-white rounded-xl text-xs font-extrabold transition-all shadow flex items-center gap-1 shrink-0 cursor-pointer">
+                <Edit c="w-3 h-3"/> Edit Vitals
               </button>
             </div>
           </div>
         )}
+
 
         {/* ── HEADER ── */}
         <div className="flex flex-col gap-3 mb-5 sm:mb-8">
@@ -2427,52 +2897,55 @@ export default function Dashboard() {
                     <h3 className="text-xs font-extrabold text-[#004346] uppercase tracking-wider">Today's Medicines</h3>
                     {medLoading && <span className="text-[10px] text-gray-400 animate-pulse">Loading...</span>}
                   </div>
-                  {schedule.filter(dose => !globalMedSearch || (dose.name||'').toLowerCase().includes(globalMedSearch.toLowerCase())).length === 0 ? (
-                    <div className="flex flex-col items-center justify-center py-8 text-center">
-                      <TabletIcon c="w-10 h-10 text-gray-200 mb-3"/><p className="text-sm font-bold text-gray-400">No medicines scheduled for this date.</p>
-                    </div>
-                  ) : schedule.filter(dose => !globalMedSearch || (dose.name||'').toLowerCase().includes(globalMedSearch.toLowerCase())).map(dose=>(
-                    <div key={`${dose.medicine_id}-${dose.scheduled_time}`}
-                      className={`flex items-center gap-3 p-3 sm:p-4 rounded-2xl border transition-all ${statusColor(dose.status)}`}>
-                      <div className="w-10 h-10 rounded-xl bg-white/70 border border-white flex items-center justify-center shrink-0">
-                        <FormIcon formulation={dose.formulation} c="w-5 h-5 text-[#508991]"/>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto pr-1">
+                    {schedule.filter(dose => !globalMedSearch || (dose.name||'').toLowerCase().includes(globalMedSearch.toLowerCase())).length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-8 text-center">
+                        <TabletIcon c="w-10 h-10 text-gray-200 mb-3"/><p className="text-sm font-bold text-gray-400">No medicines scheduled for this date.</p>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-extrabold text-sm text-[#004346] truncate">{dose.name}</p>
-                        <div className="flex items-center gap-2 mt-0.5 flex-wrap">
-                          <span className="flex items-center gap-1 text-[10px] text-gray-500 font-semibold"><Clock c="w-3 h-3"/>{dose.scheduled_time}</span>
-                          {dose.dosage && <span className="text-[10px] text-[#508991] font-bold px-1.5 py-0.5 bg-white/60 rounded-lg">Dosage: {dose.dosage}</span>}
+                    ) : schedule.filter(dose => !globalMedSearch || (dose.name||'').toLowerCase().includes(globalMedSearch.toLowerCase())).map(dose=>(
+                      <div key={`${dose.medicine_id}-${dose.scheduled_time}`}
+                        className={`flex items-center gap-3 p-3 sm:p-4 rounded-2xl border transition-all ${statusColor(dose.status)}`}>
+                        <div className="w-10 h-10 rounded-xl bg-white/70 border border-white flex items-center justify-center shrink-0">
+                          <FormIcon formulation={dose.formulation} c="w-5 h-5 text-[#508991]"/>
                         </div>
-                        {dose.description && <p className="text-[10px] text-gray-400 mt-0.5 truncate italic">Instructions: {dose.description}</p>}
+                        <div className="flex-1 min-w-0">
+                          <p className="font-extrabold text-sm text-[#004346] truncate">{dose.name}</p>
+                          <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                            <span className="flex items-center gap-1 text-[10px] text-gray-500 font-semibold"><Clock c="w-3 h-3"/>{dose.scheduled_time}</span>
+                            {dose.dosage && <span className="text-[10px] text-[#508991] font-bold px-1.5 py-0.5 bg-white/60 rounded-lg">Dosage: {dose.dosage}</span>}
+                          </div>
+                          {dose.description && <p className="text-[10px] text-gray-400 mt-0.5 truncate italic">Instructions: {dose.description}</p>}
+                        </div>
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <button onClick={()=>handleNudge(dose.medicine_id, dose.scheduled_time, dose.name)}
+                            className="w-8 h-8 rounded-xl bg-white/70 border border-white text-[#508991] hover:text-[#004346] flex items-center justify-center cursor-pointer transition-all" title="Send reminder">
+                            <Bell c="w-3.5 h-3.5"/>
+                          </button>
+                          <button onClick={()=>toggleStatus(dose.medicine_id, dose.scheduled_time, dose.status, dose.name)}
+                            className={`w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer transition-all border font-bold ${
+                              dose.status==="taken" ? "bg-emerald-500 text-white border-emerald-500 shadow-md shadow-emerald-500/20" :
+                              dose.status==="missed" ? "bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-500/20" :
+                              "bg-white/70 text-gray-400 border-white hover:border-[#004346] hover:text-[#004346]"
+                            }`}>
+                            {dose.status==="taken" ? <Check c="w-4 h-4"/> : dose.status==="missed" ? <X c="w-4 h-4"/> : <span className="w-2 h-2 rounded-full bg-gray-300"/>}
+                          </button>
+                          <button onClick={()=>{
+                            const med = medicines.find(m => m.id === dose.medicine_id);
+                            if (med) setEditingMedicine(med);
+                          }}
+                            className="w-8 h-8 rounded-xl bg-white/70 border border-white text-[#508991] hover:text-[#004346] hover:bg-[#D6F3F4] flex items-center justify-center cursor-pointer transition-all" title="Edit medicine">
+                            <Edit c="w-3.5 h-3.5"/>
+                          </button>
+                          <button onClick={()=>setDeleteConfirm({type:"medicine",id:dose.medicine_id,name:dose.name})}
+                            className="w-8 h-8 rounded-xl bg-white/70 border border-white text-rose-400 hover:bg-rose-500 hover:text-white flex items-center justify-center cursor-pointer transition-all">
+                            <Trash c="w-3.5 h-3.5"/>
+                          </button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button onClick={()=>handleNudge(dose.medicine_id, dose.scheduled_time, dose.name)}
-                          className="w-8 h-8 rounded-xl bg-white/70 border border-white text-[#508991] hover:text-[#004346] flex items-center justify-center cursor-pointer transition-all" title="Send reminder">
-                          <Bell c="w-3.5 h-3.5"/>
-                        </button>
-                        <button onClick={()=>toggleStatus(dose.medicine_id, dose.scheduled_time, dose.status, dose.name)}
-                          className={`w-9 h-9 rounded-xl flex items-center justify-center cursor-pointer transition-all border font-bold ${
-                            dose.status==="taken" ? "bg-emerald-500 text-white border-emerald-500 shadow-md shadow-emerald-500/20" :
-                            dose.status==="missed" ? "bg-rose-500 text-white border-rose-500 shadow-md shadow-rose-500/20" :
-                            "bg-white/70 text-gray-400 border-white hover:border-[#004346] hover:text-[#004346]"
-                          }`}>
-                          {dose.status==="taken" ? <Check c="w-4 h-4"/> : dose.status==="missed" ? <X c="w-4 h-4"/> : <span className="w-2 h-2 rounded-full bg-gray-300"/>}
-                        </button>
-                        <button onClick={()=>{
-                          const med = medicines.find(m => m.id === dose.medicine_id);
-                          if (med) setEditingMedicine(med);
-                        }}
-                          className="w-8 h-8 rounded-xl bg-white/70 border border-white text-[#508991] hover:text-[#004346] hover:bg-[#D6F3F4] flex items-center justify-center cursor-pointer transition-all" title="Edit medicine">
-                          <Edit c="w-3.5 h-3.5"/>
-                        </button>
-                        <button onClick={()=>setDeleteConfirm({type:"medicine",id:dose.medicine_id,name:dose.name})}
-                          className="w-8 h-8 rounded-xl bg-white/70 border border-white text-rose-400 hover:bg-rose-500 hover:text-white flex items-center justify-center cursor-pointer transition-all">
-                          <Trash c="w-3.5 h-3.5"/>
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    ))}
+                  </div>
                 </div>
+
               </div>
               </div>
               {/* Right column */}
@@ -2880,55 +3353,76 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* ΓòÉΓòÉΓòÉΓòÉ HISTORY TAB ΓòÉΓòÉΓòÉΓòÉ */}
-        {tab === "history" && (
-          <div className="space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-lg sm:text-xl font-extrabold text-[#004346]">Medication History</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Complete log of all taken, missed and pending doses.</p>
+        {/* ════ HISTORY TAB ════ */}
+        {tab === "history" && (() => {
+          const filteredHistory = history.filter(log => {
+            const matchesSearch = !globalMedSearch || (log.medicine_name || '').toLowerCase().includes(globalMedSearch.toLowerCase());
+            if (!matchesSearch) return false;
+            if (historyFilter === "taken") return log.status === "taken";
+            if (historyFilter === "pending") return log.status === "pending" || log.status === "scheduled";
+            if (historyFilter === "missed") return log.status === "missed";
+            return true;
+          });
+
+          return (
+            <div className="space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <h2 className="text-lg sm:text-xl font-extrabold text-[#004346]">Medication History</h2>
+                  <p className="text-xs text-gray-400 mt-0.5">Complete log of all taken, missed and pending doses.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <select value={historyFilter} onChange={e => setHistoryFilter(e.target.value)}
+                    className="px-3 py-1.5 rounded-xl border border-gray-200 bg-white text-xs font-bold text-[#004346] outline-none cursor-pointer">
+                    <option value="all">All Statuses</option>
+                    <option value="taken">Taken</option>
+                    <option value="pending">Pending</option>
+                    <option value="missed">Missed</option>
+                  </select>
+                  {histLoading && <span className="text-xs text-gray-400 animate-pulse">Loading...</span>}
+                </div>
               </div>
-              {histLoading && <span className="text-xs text-gray-400 animate-pulse">Loading...</span>}
+              {filteredHistory.length === 0 ? (
+                <div className="flex flex-col items-center justify-center p-14 sm:p-16 bg-white rounded-3xl border border-dashed border-gray-200 text-center">
+                  <Clock c="w-12 h-12 text-gray-200 mb-4"/><p className="text-sm font-bold text-gray-400">No history records matching "{historyFilter}".</p>
+                </div>
+              ) : (
+                <div className="bg-white rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm overflow-hidden overflow-x-auto">
+                  <table className="w-full text-sm min-w-[480px]">
+                    <thead><tr className="bg-[#004346]/5 text-[#004346]">
+                      {["Medicine","Date","Scheduled","Status","Logged At"].map(h=>(
+                        <th key={h} className="text-left px-4 sm:px-5 py-3 text-[10px] font-extrabold uppercase tracking-wider">{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {filteredHistory.map(log=>(
+                        <tr key={log.id} className="hover:bg-gray-50 transition-colors">
+                          <td className="px-4 sm:px-5 py-3 font-bold text-[#004346]">{log.medicine_name}</td>
+                          <td className="px-4 sm:px-5 py-3 text-gray-500 text-xs">{log.log_date||log.taken_at?.slice(0,10)}</td>
+                          <td className="px-4 sm:px-5 py-3 text-gray-500 text-xs">{log.scheduled_time||"—"}</td>
+                          <td className="px-4 sm:px-5 py-3">
+                            <button
+                              onClick={() => toggleHistoryStatus(log)}
+                              title="Click to toggle status"
+                              className={`cursor-pointer text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-full transition-all hover:opacity-70 ${
+                                log.status === "taken" ? "bg-emerald-100 text-emerald-700" :
+                                log.status === "missed" ? "bg-red-100 text-red-600" :
+                                "bg-gray-100 text-gray-500"
+                              }`}>
+                              {log.status}
+                            </button>
+                          </td>
+                          <td className="px-4 sm:px-5 py-3 text-gray-400 text-xs">{log.taken_at}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-            {history.filter(log => !globalMedSearch || (log.medicine_name||'').toLowerCase().includes(globalMedSearch.toLowerCase())).length === 0 ? (
-              <div className="flex flex-col items-center justify-center p-14 sm:p-16 bg-white rounded-3xl border border-dashed border-gray-200 text-center">
-                <Clock c="w-12 h-12 text-gray-200 mb-4"/><p className="text-sm font-bold text-gray-400">No history records yet.</p>
-              </div>
-            ) : (
-              <div className="bg-white rounded-2xl sm:rounded-3xl border border-gray-100 shadow-sm overflow-hidden overflow-x-auto">
-                <table className="w-full text-sm min-w-[480px]">
-                  <thead><tr className="bg-[#004346]/5 text-[#004346]">
-                    {["Medicine","Date","Scheduled","Status","Logged At"].map(h=>(
-                      <th key={h} className="text-left px-4 sm:px-5 py-3 text-[10px] font-extrabold uppercase tracking-wider">{h}</th>
-                    ))}
-                  </tr></thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {history.filter(log => !globalMedSearch || (log.medicine_name||'').toLowerCase().includes(globalMedSearch.toLowerCase())).map(log=>(
-                      <tr key={log.id} className="hover:bg-gray-50 transition-colors">
-                        <td className="px-4 sm:px-5 py-3 font-bold text-[#004346]">{log.medicine_name}</td>
-                        <td className="px-4 sm:px-5 py-3 text-gray-500 text-xs">{log.log_date||log.taken_at?.slice(0,10)}</td>
-                        <td className="px-4 sm:px-5 py-3 text-gray-500 text-xs">{log.scheduled_time||"—"}</td>
-                        <td className="px-4 sm:px-5 py-3">
-                          <button
-                            onClick={() => toggleHistoryStatus(log)}
-                            title="Click to toggle status"
-                            className={`cursor-pointer text-[9px] font-extrabold uppercase px-2.5 py-1 rounded-full transition-all hover:opacity-70 ${
-                              log.status === "taken" ? "bg-emerald-100 text-emerald-700" :
-                              log.status === "missed" ? "bg-red-100 text-red-600" :
-                              "bg-gray-100 text-gray-500"
-                            }`}>
-                            {log.status}
-                          </button>
-                        </td>
-                        <td className="px-4 sm:px-5 py-3 text-gray-400 text-xs">{log.taken_at}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )}
+          );
+        })()}
+
 
         {/* ΓòÉΓòÉΓòÉΓòÉ SETTINGS TAB ΓòÉΓòÉΓòÉΓòÉ */}
         {tab === "settings" && (
@@ -2940,7 +3434,18 @@ export default function Dashboard() {
               </div>
               <form onSubmit={handleProfileUpdate} className="space-y-4">
                 <div><label className="label">Full Name</label><input className={inp} value={profileForm.name} onChange={e=>setProfileForm({...profileForm,name:e.target.value})} required/></div>
-                <div><label className="label">Phone</label><input type="tel" pattern="[0-9]{10}" title="Please enter a 10 digit phone number" className={inp} value={profileForm.phone} onChange={e=>setProfileForm({...profileForm,phone:e.target.value})} placeholder="Enter your 10 digit number"/></div>
+                <div><label className="label">Phone</label>
+                  <div className="flex rounded-2xl border border-gray-200 overflow-hidden bg-white">
+                    <select value={profileCountryCode} onChange={e=>setProfileCountryCode(e.target.value)} className="px-2 bg-transparent text-xs font-bold border-r border-gray-200 outline-none">
+                      <option value="+91">+91</option>
+                      <option value="+1">+1</option>
+                      <option value="+44">+44</option>
+                      <option value="+61">+61</option>
+                      <option value="+971">+971</option>
+                    </select>
+                    <input type="tel" value={profilePhoneNum} onChange={e=>setProfilePhoneNum(e.target.value.replace(/\D/g, "").slice(0, 10))} className="flex-1 px-3 py-2 text-xs outline-none border-none focus:ring-0" placeholder="10 digit number" maxLength={10}/>
+                  </div>
+                </div>
                 {role==="patient"&&(
                   <div className="grid grid-cols-2 gap-3 p-4 rounded-2xl bg-[#D6F3F4]/40 border border-[#508991]/15">
                     <div className="col-span-2 text-[10px] font-extrabold text-[#004346] uppercase tracking-wide pb-1 border-b border-[#508991]/10">Health Stats</div>
@@ -2966,13 +3471,24 @@ export default function Dashboard() {
                 <p className="text-xs text-gray-400 mt-0.5">Change your password. Min. 6 characters.</p>
               </div>
               <form onSubmit={handlePwChange} className="space-y-4">
-                <div><label className="label">Current Password</label><input type="password" className={inp} value={pwForm.old_password} onChange={e=>setPwForm({...pwForm,old_password:e.target.value})} placeholder="••••••••" required autoComplete="current-password"/></div>
-                <div><label className="label">New Password</label><input type="password" className={inp} value={pwForm.new_password} onChange={e=>setPwForm({...pwForm,new_password:e.target.value})} placeholder="••••••••" required autoComplete="new-password"/></div>
-                <div><label className="label">Confirm New Password</label><input type="password" className={inp} value={pwForm.confirm_password} onChange={e=>setPwForm({...pwForm,confirm_password:e.target.value})} placeholder="••••••••" required autoComplete="new-password"/></div>
+                <div><label className="label">New Password</label><input type="password" className={inp} value={pwForm.new_password} onChange={e=>setPwForm({...pwForm,new_password:e.target.value})} placeholder="••••••••" required autoComplete="new-password" minLength={6}/></div>
+                <div><label className="label">Confirm New Password</label><input type="password" className={inp} value={pwForm.confirm_password} onChange={e=>setPwForm({...pwForm,confirm_password:e.target.value})} placeholder="••••••••" required autoComplete="new-password" minLength={6}/></div>
+                
+                <div>
+                  <label className="label">Verification Code (Gmail)</label>
+                  <div className="flex gap-2">
+                    <input type="text" className={inp + " flex-1"} value={pwForm.code} onChange={e=>setPwForm({...pwForm,code:e.target.value.slice(0,6)})} placeholder="6-digit code" required maxLength={6}/>
+                    <button type="button" onClick={handleSendPasswordCode} disabled={codeCooldown > 0} className={`px-4 rounded-2xl text-xs font-bold transition-all cursor-pointer border ${codeCooldown > 0 ? "bg-gray-100 text-gray-400 border-gray-200 cursor-not-allowed" : "bg-teal-50 border-teal-200 text-[#004346] hover:bg-teal-100"}`}>
+                      {codeCooldown > 0 ? `Resend (${codeCooldown}s)` : "Get Code"}
+                    </button>
+                  </div>
+                </div>
+
                 <button type="submit" disabled={pwLoading} className={`w-full py-3.5 rounded-2xl text-white font-bold text-sm cursor-pointer transition-all ${pwLoading?"bg-[#508991]":"bg-[#004346] hover:bg-[#508991]"}`}>
                   {pwLoading?"Updating...":"Update Password"}
                 </button>
               </form>
+
             </div>
 
             {/* Danger Zone – Delete Account */}
@@ -3074,35 +3590,81 @@ export default function Dashboard() {
                   <p className="text-xs text-gray-300 mt-1">Add contacts who should be notified in emergencies.</p>
                 </div>
               ) : emergencyContacts.map((c,i)=>(
-                <div key={i} className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 border border-gray-100">
+                <div key={c.id || i} className="flex items-center gap-4 p-4 rounded-2xl bg-gray-50 border border-gray-100">
                   <div className="w-10 h-10 rounded-xl bg-[#D6F3F4] text-[#004346] font-extrabold flex items-center justify-center uppercase text-sm">{c.name?.slice(0,2)}</div>
                   <div className="flex-1 min-w-0">
                     <p className="text-sm font-bold text-[#004346]">{c.name}</p>
-                    <p className="text-xs text-gray-400">{c.phone} • {c.relation}</p>
+                    <p className="text-xs text-gray-400">
+                      {c.phone} • {c.relation} {c.email ? `• ${c.email}` : ""}
+                    </p>
                   </div>
-                  <button onClick={()=>setEmergencyContacts(p=>p.filter((_,j)=>j!==i))} className="text-rose-400 hover:text-rose-600 cursor-pointer"><Trash c="w-4 h-4"/></button>
+                  <div className="flex gap-2 shrink-0">
+                    <button onClick={() => setEditingContact(c)} className="text-gray-400 hover:text-[#004346] cursor-pointer" title="Edit Contact"><EditIcon c="w-4 h-4"/></button>
+                    <button onClick={async () => {
+                      if (c.id) {
+                        try {
+                          await axios.delete(`${API}/emergency-contacts/${c.id}`, { headers: { Authorization: `Bearer ${token}` } });
+                          setEmergencyContacts(p => p.filter(x => x.id !== c.id));
+                          showToast("Emergency contact removed!");
+                        } catch {
+                          showToast("Failed to delete contact", "error");
+                        }
+                      } else {
+                        setEmergencyContacts(p => p.filter((_, j) => j !== i));
+                      }
+                    }} className="text-rose-400 hover:text-rose-600 cursor-pointer" title="Delete Contact"><Trash c="w-4 h-4"/></button>
+                  </div>
                 </div>
               ))}
             </div>
-            <form onSubmit={e=>{
+            <form onSubmit={async (e) => {
               e.preventDefault();
-              const fd=new FormData(e.target);
-              const name=fd.get("name"), phone=fd.get("phone"), relation=fd.get("relation");
-              if(!name||!phone) return;
-              setEmergencyContacts(p=>[...p,{name,phone,relation:relation||"Other"}]);
-              e.target.reset();
-              showToast("Emergency contact added!");
+              const fd = new FormData(e.target);
+              const name = fd.get("name");
+              const countryCode = fd.get("country_code");
+              const phoneNum = fd.get("phone_num");
+              const relation = fd.get("relation");
+              const email = fd.get("email");
+              if (!name || !phoneNum) return;
+              try {
+                const res = await axios.post(`${API}/emergency-contacts`, {
+                  name, phone: `${countryCode}${phoneNum}`, relation, email: email || null
+                }, {
+                  headers: { Authorization: `Bearer ${token}` }
+                });
+                setEmergencyContacts(p => [...p, res.data]);
+                e.target.reset();
+                showToast("Emergency contact added!");
+              } catch {
+                showToast("Failed to add emergency contact", "error");
+              }
             }} className="mt-6 p-4 rounded-2xl bg-[#D6F3F4]/40 border border-[#508991]/15">
               <p className="text-[10px] font-extrabold text-[#004346] uppercase tracking-wide mb-3">Add New Contact</p>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
                 <input name="name" placeholder="Full Name" className="input text-xs" required/>
-                <input name="phone" placeholder="Phone Number" type="tel" className="input text-xs" required/>
-                <input name="relation" placeholder="Relation (e.g. Spouse, Parent)" className="input text-xs"/>
+                <div className="flex rounded-2xl border border-gray-200 overflow-hidden bg-white">
+                  <select name="country_code" className="px-2 bg-transparent text-xs font-bold border-r border-gray-200 outline-none">
+                    <option value="+91">+91</option>
+                    <option value="+1">+1</option>
+                    <option value="+44">+44</option>
+                    <option value="+61">+61</option>
+                    <option value="+971">+971</option>
+                  </select>
+                  <input name="phone_num" type="tel" onChange={e => e.target.value = e.target.value.replace(/\D/g, "").slice(0, 10)} className="flex-1 px-3 py-2 text-xs outline-none border-none focus:ring-0" placeholder="10 digit number" maxLength={10} required/>
+                </div>
+                <input name="email" placeholder="Gmail Address" type="email" className="input text-xs"/>
+                <select name="relation" className="input text-xs" required defaultValue="Family">
+                  <option value="Family">Family</option>
+                  <option value="Friend">Friend</option>
+                  <option value="Consultant/Doctor">Consultant/Doctor</option>
+                  <option value="Other">Other</option>
+                </select>
               </div>
               <button type="submit" className="mt-3 px-5 py-2.5 rounded-2xl bg-[#004346] hover:bg-[#508991] text-white font-bold text-xs cursor-pointer transition-all">Add Contact</button>
             </form>
           </div>
         )}
+
 
         {/* ████ REFILL PREDICTOR TAB ████ */}
         {tab === "refill" && (
@@ -3114,7 +3676,9 @@ export default function Dashboard() {
           />
         )}
 
+        </div>{/* end max-w wrapper */}
       </div>{/* end main content */}
+
       </div>{/* end flex layout */}
 
       {/* ── FLOATING AI ASSISTANT CHATBOT ── */}

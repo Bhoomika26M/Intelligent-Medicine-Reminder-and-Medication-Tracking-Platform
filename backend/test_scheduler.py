@@ -40,8 +40,11 @@ finally:
 # ── 4. Trigger a live test email ─────────────────────────────────────────────
 print('\n[EMAIL TEST] Sending test reminder email...')
 from main import send_reminder_email, send_low_stock_email
-send_reminder_email('ayushisaha278@gmail.com', 'Ayushi Test', 'Qtil CV', '09:25 am')
+import os
+test_email = os.getenv("SENDGRID_FROM_EMAIL", "noreply@pillsync.app")
+send_reminder_email(test_email, 'Ayushi Test', 'Qtil CV', '09:25 am')
 print('[EMAIL TEST] send_reminder_email done')
-send_low_stock_email('ayushisaha278@gmail.com', 'Ayushi Test', 'Qtil CV', 17.0)
+send_low_stock_email(test_email, 'Ayushi Test', 'Qtil CV', 17.0)
 print('[EMAIL TEST] send_low_stock_email done')
-print('\nDone - check Gmail inbox!')
+print(f'\nDone - check {test_email} inbox!')
+
