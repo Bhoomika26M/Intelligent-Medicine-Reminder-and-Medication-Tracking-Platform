@@ -43,9 +43,10 @@ def test_register_weak_password(client):
 
 
 def test_login_success(client, test_patient):
+    password = "Password123!"
     response = client.post(
         "/auth/login",
-        json={"email": test_patient.email, "password": "Password123!"},
+        json={"email": test_patient.email, "password": password},
     )
     assert response.status_code == 200
     data = response.json()
@@ -54,9 +55,10 @@ def test_login_success(client, test_patient):
 
 
 def test_login_invalid_credentials(client, test_patient):
+    password = "WrongPassword!"
     response = client.post(
         "/auth/login",
-        json={"email": test_patient.email, "password": "WrongPassword!"},
+        json={"email": test_patient.email, "password": password},
     )
     assert response.status_code == 401
 
@@ -81,9 +83,10 @@ def test_forgot_and_reset_password(client, test_patient):
     assert token is not None
 
     # Reset password
+    new_password = "NewSecretPass123!"
     reset_res = client.post(
         "/auth/reset-password",
-        json={"token": token, "new_password": "NewSecretPass123!"},
+        json={"token": token, "new_password": new_password},
     )
     assert reset_res.status_code == 200
     assert reset_res.json()["message"] == "Password reset successfully"
@@ -91,6 +94,6 @@ def test_forgot_and_reset_password(client, test_patient):
     # Login with new password
     login_res = client.post(
         "/auth/login",
-        json={"email": test_patient.email, "password": "NewSecretPass123!"},
+        json={"email": test_patient.email, "password": new_password},
     )
     assert login_res.status_code == 200
