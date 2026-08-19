@@ -2,11 +2,11 @@ from flask_cors import CORS
 from flask import Flask, jsonify, request
 from flask_sqlalchemy import SQLAlchemy
 from flask_jwt_extended import JWTManager, create_access_token, jwt_required, get_jwt_identity
-from datetime import datetime, date, timezone
+from datetime import datetime, date
+from flask_cors import CORS
 from werkzeug.security import generate_password_hash, check_password_hash
 from dotenv import load_dotenv
 from datetime import datetime
-from apscheduler.schedulers.background import BackgroundScheduler
 import os
 
 load_dotenv()
@@ -17,17 +17,17 @@ from flask_mail import Mail, Message
 app.config['MAIL_SERVER'] = 'smtp.gmail.com'
 app.config['MAIL_PORT'] = 587
 app.config['MAIL_USE_TLS'] = True
-app.config['MAIL_USERNAME'] = os.getenv('MAIL_USERNAME') 
-app.config['MAIL_PASSWORD'] = os.getenv('MAIL_PASSWORD')   
+app.config['MAIL_USERNAME'] = 'afsaaiman33@gmail.com'  
+app.config['MAIL_PASSWORD'] = 'fmtpnsokusskfhul'     
 
 mail = Mail(app)
-CORS(app, supports_credentials=True, origins=["http://localhost:5173", "http://127.0.0.1:5173"])
+CORS(app)
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///medicine_reminder.db'
 app.config['JWT_SECRET_KEY'] = os.getenv('JWT_SECRET_KEY', 'dev-secret-key-change-later')
 
 db = SQLAlchemy(app)
 jwt = JWTManager(app)
-
+CORS(app)
 
 # ---------------- USER MODEL ----------------
 class User(db.Model):
@@ -352,26 +352,6 @@ def get_medication_history():
     return jsonify({
         'history': result,
         'count': len(result)
-    }), 200
-
-@app.route('/adherence', methods=['GET'])
-@jwt_required()
-def get_adherence():
-    user_id = get_jwt_identity()
-    
-    history = MedicationHistory.query.filter_by(user_id=int(user_id)).all()
-    
-    total = len(history)
-    taken = len([h for h in history if h.status == 'taken'])
-    missed = len([h for h in history if h.status == 'missed'])
-    
-    adherence_percentage = round((taken / total) * 100) if total > 0 else 0
-    
-    return jsonify({
-        "total_doses": total,
-        "taken": taken,
-        "missed": missed,
-        "adherence_percentage": adherence_percentage
     }), 200
 if __name__ == '__main__':
     with app.app_context():
