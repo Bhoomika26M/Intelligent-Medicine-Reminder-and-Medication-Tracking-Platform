@@ -6,7 +6,7 @@ import { Card, StatCard, Badge, EmptyState, Button } from "@/components/ui";
 import { showReminderNotification } from "@/notifications";
 import {
   Pill, CheckCircle2, XCircle, Clock, AlertTriangle, Package,
-  BellRing, CalendarClock, TrendingUp,
+  BellRing, CalendarClock, TrendingUp, Activity,
 } from "lucide-react";
 import { Link } from "react-router-dom";
 
@@ -55,6 +55,7 @@ export default function Dashboard() {
   const upcoming = reminders.find((r) => r.reminder_time >= new Date().toTimeString().slice(0, 5));
   const recent = [...history].reverse().slice(0, 6);
   const medName = (id: string) => meds.find((m) => m.id === id)?.name || "Unknown";
+  const totalDoses = analytics.taken_count + analytics.missed_count;
 
   return (
     <div className="space-y-6">
@@ -66,20 +67,46 @@ export default function Dashboard() {
         </p>
       </div>
 
-      {/* Stat grid */}
+      {/* M4 Analytics stat grid — required cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard label="Total Medicines" value={analytics.total_medicines} icon={<Pill className="w-5 h-5" />} tone="primary" />
-        <StatCard label="Today's Medicines" value={reminders.length} icon={<CalendarClock className="w-5 h-5" />} tone="accent" />
-        <StatCard label="Taken Today" value={analytics.taken_today} icon={<CheckCircle2 className="w-5 h-5" />} tone="success" />
-        <StatCard label="Missed Today" value={analytics.missed_today} icon={<XCircle className="w-5 h-5" />} tone="danger" />
+        <StatCard label="Active Medicines" value={analytics.active_medicines} icon={<Activity className="w-5 h-5" />} tone="accent" />
+        <StatCard label="Doses Taken" value={analytics.taken_count} icon={<CheckCircle2 className="w-5 h-5" />} tone="success" />
+        <StatCard label="Doses Missed" value={analytics.missed_count} icon={<XCircle className="w-5 h-5" />} tone="danger" />
       </div>
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-        <StatCard label="Pending Today" value={Math.max(0, reminders.length - analytics.taken_today - analytics.missed_today)} icon={<Clock className="w-5 h-5" />} tone="warning" />
-        <StatCard label="Low Stock" value={analytics.low_stock.length} icon={<AlertTriangle className="w-5 h-5" />} tone="warning" />
-        <StatCard label="Refill Soon" value={analytics.refill_soon.length} icon={<Package className="w-5 h-5" />} tone="danger" />
-        <StatCard label="Adherence" value={`${analytics.adherence}%`} icon={<TrendingUp className="w-5 h-5" />} tone="success" />
+        <StatCard label="Overall Adherence" value={`${analytics.adherence}%`} icon={<TrendingUp className="w-5 h-5" />} tone="success" />
+        <StatCard label="Low on Stock" value={analytics.low_stock.length} icon={<AlertTriangle className="w-5 h-5" />} tone="warning" />
+        <StatCard label="Requiring Refill" value={analytics.refill_overview.requiring_refill + analytics.refill_overview.out_of_stock} icon={<Package className="w-5 h-5" />} tone="danger" />
+        <StatCard label="Upcoming Reminders" value={reminders.length} icon={<BellRing className="w-5 h-5" />} tone="primary" />
       </div>
+
+      {/* Mini adherence bar */}
+      {totalDoses > 0 && (
+        <Card className="p-5">
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="font-semibold text-ink-900">Adherence Overview</h2>
+            <Link to="/analytics" className="text-sm text-primary-600 hover:underline">View details</Link>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex-1">
+              <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
+                <div className="bg-success-500 transition-all duration-500" style={{ width: `${totalDoses ? (analytics.taken_count / totalDoses) * 100 : 0}%` }} />
+                <div className="bg-danger-500 transition-all duration-500" style={{ width: `${totalDoses ? (analytics.missed_count / totalDoses) * 100 : 0}%` }} />
+              </div>
+              <div className="flex justify-between mt-2 text-xs text-ink-500">
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-success-500" /> Taken {analytics.taken_count}</span>
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-danger-500" /> Missed {analytics.missed_count}</span>
+              </div>
+            </div>
+            <div className="text-right shrink-0">
+              <p className="text-2xl font-bold text-ink-900">{analytics.adherence}%</p>
+              <p className="text-xs text-ink-500">adherence</p>
+            </div>
+          </div>
+        </Card>
+      )}
 
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Upcoming reminder */}

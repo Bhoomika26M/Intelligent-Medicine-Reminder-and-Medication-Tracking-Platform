@@ -219,16 +219,48 @@ def analytics(user=Depends(get_current_user)):
     missed_today = sum(1 for h in today_records if h["status"] == "Missed")
 
     low_stock = [m for m in meds if m.get("current_stock", 0) < 5]
-    refill_soon = []
+
+    # Milestone 4: refill details per medicine
+    refill_details = []
     for m in meds:
         stock = m.get("current_stock", 0)
         daily = len(m.get("times", [])) or 1
         remaining = stock / daily if daily else 0
-        if remaining <= 5:
-            refill_soon.append({**m, "remaining_days": round(remaining, 1)})
+        if stock == 0:
+            status = "Out of Stock"
+        elif remaining <= 5:
+            status = "Refill Soon"
+        else:
+            status = "Normal"
+        refill_details.append({**m, "daily_consumption": daily, "remaining_days": round(remaining, 1), "refill_status": status})
+
+    refill_soon = [{k: v for k, v in r.items() if k not in ("daily_consumption", "refill_status")} for r in refill_details if r["refill_status"] != "Normal"]
+
+    # Refill overview
+    sufficient = sum(1 for r in refill_details if r["refill_status"] == "Normal")
+    requiring_refill = sum(1 for r in refill_details if r["refill_status"] == "Refill Soon")
+    out_of_stock = sum(1 for r in refill_details if r["refill_status"] == "Out of Stock")
+    avg_remaining_days = round(sum(r["remaining_days"] for r in refill_details) / len(refill_details), 1) if refill_details else 0
+
+    # 7-day adherence trend
+    trend = []
+    for i in range(6, -1, -1):
+        d = datetime.now()
+        from datetime import timedelta
+        d = d - timedelta(days=i)
+        date_str = d.strftime("%Y-%m-%d")
+        day_records = [h for h in history if h["date"] == date_str]
+        day_taken = sum(1 for h in day_records if h["status"] == "Taken")
+        day_missed = sum(1 for h in day_records if h["status"] == "Missed")
+        day_total = day_taken + day_missed
+        day_adherence = round((day_taken / day_total) * 100, 1) if day_total else 0
+        trend.append({"date": date_str, "label": d.strftime("%a"), "taken": day_taken, "missed": day_missed, "adherence": day_adherence})
+
+    active_medicines = sum(1 for m in meds if len(m.get("times", [])) > 0 or m.get("reminder_time"))
 
     return {
         "total_medicines": len(meds),
+        "active_medicines": active_medicines,
         "taken_count": taken,
         "missed_count": missed,
         "adherence": adherence,
@@ -237,6 +269,15 @@ def analytics(user=Depends(get_current_user)):
         "low_stock": low_stock,
         "refill_soon": refill_soon,
         "today_records": today_records,
+        "refill_details": refill_details,
+        "refill_overview": {
+            "total_active": len(meds),
+            "sufficient": sufficient,
+            "requiring_refill": requiring_refill,
+            "out_of_stock": out_of_stock,
+            "avg_remaining_days": avg_remaining_days,
+        },
+        "trend": trend,
     }
 
 

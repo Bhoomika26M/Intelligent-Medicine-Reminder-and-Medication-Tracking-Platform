@@ -1,6 +1,6 @@
 import axios from "axios";
 import type {
-  User, Medicine, HistoryRecord, Analytics, Reminder, OcrResult,
+  User, Medicine, HistoryRecord, Analytics, Reminder, OcrResult, RefillDetail, TrendDay,
 } from "@/types";
 
 /**
@@ -231,18 +231,58 @@ export const analyticsApi = {
       const today = nowDate();
       const todayRecords = history.filter((h) => h.date === today);
       const low_stock = meds.filter((m) => m.current_stock < 5);
-      const refill_soon = meds
-        .map((m) => {
-          const daily = m.times.length || 1;
-          const remaining = m.current_stock / daily;
-          return { ...m, remaining_days: Math.round(remaining * 10) / 10 };
-        })
-        .filter((m) => m.remaining_days <= 5);
+
+      // Milestone 4: refill details per medicine
+      const refill_details: RefillDetail[] = meds.map((m) => {
+        const daily = m.times.length || 1;
+        const remaining = m.current_stock / daily;
+        let refill_status: RefillDetail["refill_status"] = "Normal";
+        if (m.current_stock === 0) refill_status = "Out of Stock";
+        else if (remaining <= 5) refill_status = "Refill Soon";
+        return { ...m, daily_consumption: daily, remaining_days: Math.round(remaining * 10) / 10, refill_status };
+      });
+
+      const refill_soon = refill_details
+        .filter((r) => r.refill_status !== "Normal")
+        .map(({ daily_consumption: _d, refill_status: _s, ...m }) => m);
+
+      // Refill overview
+      const sufficient = refill_details.filter((r) => r.refill_status === "Normal").length;
+      const requiring_refill = refill_details.filter((r) => r.refill_status === "Refill Soon").length;
+      const out_of_stock = refill_details.filter((r) => r.refill_status === "Out of Stock").length;
+      const avg_remaining_days = meds.length
+        ? Math.round((refill_details.reduce((sum, r) => sum + r.remaining_days, 0) / meds.length) * 10) / 10
+        : 0;
+
+      // 7-day adherence trend
+      const trend: TrendDay[] = [];
+      for (let i = 6; i >= 0; i--) {
+        const d = new Date();
+        d.setDate(d.getDate() - i);
+        const dateStr = d.toISOString().slice(0, 10);
+        const dayRecords = history.filter((h) => h.date === dateStr);
+        const dayTaken = dayRecords.filter((h) => h.status === "Taken").length;
+        const dayMissed = dayRecords.filter((h) => h.status === "Missed").length;
+        const dayTotal = dayTaken + dayMissed;
+        trend.push({
+          date: dateStr,
+          label: d.toLocaleDateString("en-US", { weekday: "short" }),
+          taken: dayTaken,
+          missed: dayMissed,
+          adherence: dayTotal ? Math.round((dayTaken / dayTotal) * 1000) / 10 : 0,
+        });
+      }
+
+      // Active medicines: have at least one time slot or a reminder set
+      const active_medicines = meds.filter((m) => m.times.length > 0 || m.reminder_time).length;
+
       return {
-        total_medicines: meds.length, taken_count: taken, missed_count: missed,
+        total_medicines: meds.length, active_medicines, taken_count: taken, missed_count: missed,
         adherence, taken_today: todayRecords.filter((h) => h.status === "Taken").length,
         missed_today: todayRecords.filter((h) => h.status === "Missed").length,
         low_stock, refill_soon, today_records: todayRecords,
+        refill_details, refill_overview: { total_active: meds.length, sufficient, requiring_refill, out_of_stock, avg_remaining_days },
+        trend,
       };
     }
   },

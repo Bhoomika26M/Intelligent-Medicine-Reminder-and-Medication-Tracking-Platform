@@ -33,8 +33,23 @@ export interface HistoryRecord {
   time: string;  // HH:MM
 }
 
+export interface RefillDetail extends Medicine {
+  daily_consumption: number;
+  remaining_days: number;
+  refill_status: "Normal" | "Refill Soon" | "Out of Stock";
+}
+
+export interface TrendDay {
+  date: string;
+  label: string;
+  taken: number;
+  missed: number;
+  adherence: number;
+}
+
 export interface Analytics {
   total_medicines: number;
+  active_medicines: number;
   taken_count: number;
   missed_count: number;
   adherence: number;
@@ -43,6 +58,16 @@ export interface Analytics {
   low_stock: Medicine[];
   refill_soon: (Medicine & { remaining_days: number })[];
   today_records: HistoryRecord[];
+  // Milestone 4 additions
+  refill_details: RefillDetail[];
+  refill_overview: {
+    total_active: number;
+    sufficient: number;
+    requiring_refill: number;
+    out_of_stock: number;
+    avg_remaining_days: number;
+  };
+  trend: TrendDay[];
 }
 
 export interface Reminder {
