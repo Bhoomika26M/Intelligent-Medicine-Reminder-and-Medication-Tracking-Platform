@@ -12,8 +12,7 @@ GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
 print("ENV PATH =", ENV_PATH)
 print("ENV EXISTS =", ENV_PATH.exists())
 print("GEMINI API FOUND =", GEMINI_API_KEY is not None)
-SECRET_KEY = 'django-insecure-9r+9g4d5(-8jp8q$nbx-l*^)be#7r*ivzcs*x$lf=5+45b7y-i'
-
+SECRET_KEY = os.getenv("SECRET_KEY")
 DEBUG = True
 
 ALLOWED_HOSTS = []
@@ -85,7 +84,7 @@ DATABASES = {
         'ENGINE': 'django.db.backends.postgresql',
         'NAME': 'pillsync_db',
         'USER': 'postgres',
-        'PASSWORD': 'postgres123',
+        'PASSWORD': os.getenv("DB_PASSWORD"),
         'HOST': 'localhost',
         'PORT': '5432',
     }
@@ -177,7 +176,6 @@ EMAIL_HOST = "smtp.gmail.com"
 EMAIL_PORT = 587
 EMAIL_USE_TLS = True
 
-EMAIL_HOST_USER = "pogakulapranathi78@gmail.com"
-EMAIL_HOST_PASSWORD = "kxwyhfysjcomaujj"
-
+EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER")
+EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD")
 DEFAULT_FROM_EMAIL = EMAIL_HOST_USER
