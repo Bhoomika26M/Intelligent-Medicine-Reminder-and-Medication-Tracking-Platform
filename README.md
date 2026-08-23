@@ -104,10 +104,3 @@ PillSync/
 ├── .gitignore
 └── README.md
 
-## Security
-Sensitive credentials such as the Django secret key, database password, email credentials and Gemini API key are stored using environment variables.
- The .env file is excluded from Git using .gitignore and is never committed to the repository.
-
-## Project Outcome
-PillSync provides a centralized platform for intelligent medication management, helping users organize their medicines, receive timely reminders, track adherence, monitor medicine availability,
- process prescriptions, and manage medication information efficiently.
