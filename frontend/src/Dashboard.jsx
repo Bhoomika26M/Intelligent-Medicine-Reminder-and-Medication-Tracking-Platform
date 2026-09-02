@@ -29,16 +29,16 @@ function Dashboard() {
   };
 
   const fetchAlerts = async () => {
-  const token = localStorage.getItem('token');
-  try {
-    const res = await axios.get('http://127.0.0.1:5000/refill-alerts', {
-      headers: { 'Authorization': `Bearer ${token}` }
-    });
-    setAlerts(res.data.alerts);
-  } catch (err) {
-    console.error(err);
-  }
-};
+    const token = localStorage.getItem('token');
+    try {
+      const res = await axios.get('http://127.0.0.1:5000/refill-alerts', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      setAlerts(res.data.alerts || []);
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const markAsTaken = async (id, name) => {
     const token = localStorage.getItem('token');
@@ -55,6 +55,20 @@ function Dashboard() {
     }
   };
 
+  const sendReminder = async (id, name) => {
+    const token = localStorage.getItem('token');
+    try {
+      await axios.post(
+        `http://127.0.0.1:5000/send-reminder/${id}`,
+        {},
+        { headers: { 'Authorization': `Bearer ${token}` } }
+      );
+      setMessage(`📧 Reminder sent for ${name}!`);
+    } catch (error) {
+      setMessage('❌ Failed to send reminder');
+    }
+  };
+
   if (loading) return <div className="text-center py-10">Loading...</div>;
 
   return (
@@ -62,42 +76,42 @@ function Dashboard() {
       {/* Stats Row */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         <div className="bg-gradient-to-r from-blue-400 to-blue-600 p-4 rounded-xl shadow flex items-center gap-3">
-          <Pill className="text-blue-500" size={28} />
+          <Pill className="text-white" size={28} />
           <div>
-            <p className="text-sm text-gray-500">Active Medicines</p>
-            <p className="text-2xl font-bold">{medicines.length}</p>
+            <p className="text-sm text-white">Active Medicines</p>
+            <p className="text-2xl font-bold text-white">{medicines.length}</p>
           </div>
         </div>
         <div className="bg-gradient-to-r from-green-400 to-green-600 p-4 rounded-xl shadow flex items-center gap-3">
-          <Calendar className="text-green-500" size={28} />
+          <Calendar className="text-white" size={28} />
           <div>
-            <p className="text-sm text-gray-500">Today's Doses</p>
-            <p className="text-2xl font-bold">{medicines.length}</p>
+            <p className="text-sm text-white">Today's Doses</p>
+            <p className="text-2xl font-bold text-white">{medicines.length}</p>
           </div>
         </div>
         <div className="bg-gradient-to-r from-purple-400 to-purple-600 p-4 rounded-xl shadow flex items-center gap-3">
-          <Activity className="text-purple-500" size={28} />
+          <Activity className="text-white" size={28} />
           <div>
-            <p className="text-sm text-gray-500">Adherence</p>
-            <p className="text-2xl font-bold">--%</p>
+            <p className="text-sm text-white">Adherence</p>
+            <p className="text-2xl font-bold text-white">--%</p>
           </div>
         </div>
         <div className="bg-gradient-to-r from-yellow-400 to-yellow-600 p-4 rounded-xl shadow flex items-center gap-3">
-          <Bell className="text-yellow-500" size={28} />
+          <Bell className="text-white" size={28} />
           <div>
-            <p className="text-sm text-gray-500">Reminders</p>
-            <p className="text-2xl font-bold">{medicines.length}</p>
+            <p className="text-sm text-white">Reminders</p>
+            <p className="text-2xl font-bold text-white">{medicines.length}</p>
           </div>
         </div>
       </div>
-      
+
       {alerts.length > 0 && (
         <div className="bg-red-100 border border-red-400 text-red-700 p-3 rounded mb-4">
           <p className="font-bold">⚠️ Refill Alerts</p>
           {alerts.map((alert) => (
             <p key={alert.id}>• {alert.message}</p>
           ))}
-         </div>
+        </div>
       )}
 
       {message && (
@@ -118,41 +132,45 @@ function Dashboard() {
         </div>
 
         {medicines.length === 0 ? (
-  <div className="text-center py-8 text-gray-500">No medicines today 🎉</div>
-) : (
-  <div className="space-y-3">
-    {medicines.map((med) => (
-      <div key={med.id} className="flex justify-between items-center border-b pb-3 hover:bg-gray-50 px-3 py-2 rounded-lg transition">
-        <div>
-          <h3 className="font-semibold">{med.name}</h3>
-          <p className="text-sm text-gray-500">💊 {med.dosage} · {med.frequency}</p>
-          <p className="text-sm text-gray-500">🕐 {med.time_of_day}</p>
-          {med.notes && <p className="text-sm text-gray-400">📝 {med.notes}</p>}
+          <div className="text-center py-8 text-gray-500">No medicines today 🎉</div>
+        ) : (
+          <div className="space-y-3">
+            {medicines.map((med) => (
+              <div key={med.id} className="flex justify-between items-center border-b pb-3 hover:bg-gray-50 px-3 py-2 rounded-lg transition">
+                <div>
+                  <h3 className="font-semibold">{med.name}</h3>
+                  <p className="text-sm text-gray-500">💊 {med.dosage} · {med.frequency}</p>
+                  <p className="text-sm text-gray-500">🕐 {med.time_of_day}</p>
+                  {med.notes && <p className="text-sm text-gray-400">📝 {med.notes}</p>}
 
-          {/* ✅ Stock & Refill Info */}
-          {med.stock_count && (
-            <div className="mt-2">
-              <p className="text-sm text-gray-600">📦 Stock: {med.stock_count} tablets</p>
-              <p className="text-sm text-gray-600">
-                ⏳ Days left: ~{Math.floor(med.stock_count / 2)}
-              </p>
-              {med.stock_count < 5 && (
-                <p className="text-red-500 text-sm font-bold">⚠️ Low Stock! Refill Soon!</p>
-              )}
-            </div>
-          )}
-        </div>
-
-        <button
-          onClick={() => markAsTaken(med.id, med.name)}
-          className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
-        >
-          ✅ Take
-        </button>
-      </div>
-    ))}
-  </div>
-)}
+                  {med.stock_count && (
+                    <div className="mt-2">
+                      <p className="text-sm text-gray-600">📦 Stock: {med.stock_count} tablets</p>
+                      <p className="text-sm text-gray-600">⏳ Days left: ~{Math.floor(med.stock_count / 2)}</p>
+                      {med.stock_count < 5 && (
+                        <p className="text-red-500 text-sm font-bold">⚠️ Low Stock! Refill Soon!</p>
+                      )}
+                    </div>
+                  )}
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => markAsTaken(med.id, med.name)}
+                    className="bg-green-500 text-white px-4 py-2 rounded-lg hover:bg-green-600"
+                  >
+                    ✅ Take
+                  </button>
+                  <button
+                    onClick={() => sendReminder(med.id, med.name)}
+                    className="bg-blue-500 text-white px-4 py-2 rounded-lg hover:bg-blue-600"
+                  >
+                    📧 Remind
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

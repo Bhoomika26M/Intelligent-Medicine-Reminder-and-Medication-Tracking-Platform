@@ -84,7 +84,7 @@ function AddMedicine() {
             required
           />
         </div>
-        
+
         {/* Row 2: Dosage */}
         <div className="mb-4">
           <label className="block text-gray-700 font-bold mb-2">Dosage *</label>
@@ -99,7 +99,7 @@ function AddMedicine() {
           />
         </div>
 
-        {/* Row 3: Unit + Type (side by side) */}
+        {/* Row 3: Unit + Type */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-gray-700 font-bold mb-2">Unit</label>
@@ -175,7 +175,7 @@ function AddMedicine() {
           />
         </div>
 
-        {/* Row 7: Start Date + End Date (side by side) */}
+        {/* Row 7: Start Date + End Date */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-gray-700 font-bold mb-2">Start Date</label>
@@ -201,7 +201,7 @@ function AddMedicine() {
           </div>
         </div>
 
-        {/* Row 8: Reminder Times + Stock Count (side by side) */}
+        {/* Row 8: Reminder Times + Stock Count */}
         <div className="grid grid-cols-2 gap-4 mb-4">
           <div>
             <label className="block text-gray-700 font-bold mb-2">Reminder Times</label>
