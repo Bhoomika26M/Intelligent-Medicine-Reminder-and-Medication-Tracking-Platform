@@ -4,6 +4,7 @@ from django.conf import settings
 
 
 class User(AbstractUser):
+
     ROLE_CHOICES = [
         ("PATIENT", "Patient"),
         ("CAREGIVER", "Caregiver"),
@@ -21,6 +22,26 @@ class User(AbstractUser):
         blank=True,
     )
 
+    # ==========================================
+    # NOTIFICATION SETTINGS
+    # ==========================================
+
+    email_notifications = models.BooleanField(
+        default=True,
+    )
+
+    medicine_reminders = models.BooleanField(
+        default=True,
+    )
+
+    medicine_alerts = models.BooleanField(
+        default=True,
+    )
+
+    # ==========================================
+    # USER TIMESTAMPS
+    # ==========================================
+
     created_at = models.DateTimeField(
         auto_now_add=True,
     )
@@ -33,7 +54,12 @@ class User(AbstractUser):
         return self.username
 
 
+# ==============================================
+# PASSWORD RESET OTP
+# ==============================================
+
 class PasswordResetOTP(models.Model):
+
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

@@ -29,25 +29,37 @@ def send_medication_reminders():
         medicine = schedule.medicine
         user = medicine.user
 
-        print(f"Sending reminder to: {user.email}")
+        print(f"Checking notification settings for: {user.email}")
 
-        try:
-            send_mail(
-                subject="💊 PillSync Reminder: Time for Your Medicine",
- message=f"""
+        # ==========================================
+        # EMAIL + MEDICINE REMINDER SETTINGS
+        # ==========================================
+
+        if (
+            user.email_notifications
+            and user.medicine_reminders
+        ):
+
+            print(f"Sending reminder to: {user.email}")
+
+            try:
+                send_mail(
+                    subject="💊 PillSync Reminder: Time for Your Medicine",
+
+                    message=f"""
 Hello {user.first_name},
 
 ⏰ It's time to take your medicine.
 
 💊 Medicine : {medicine.medicine_name}
-    Dosage   : {medicine.dosage}
-    Quantity : {schedule.quantity_per_dose}
-    Time     : {schedule.reminder_time}
+Dosage      : {medicine.dosage}
+Quantity    : {schedule.quantity_per_dose}
+Time        : {schedule.reminder_time}
 
 -----------------------------------
 
-Click the link below to open PillSync
-and mark your medicine as Taken or Missed.
+Open PillSync to mark your medicine
+as Taken or Missed.
 
 http://localhost:5173/reminders
 
@@ -56,37 +68,81 @@ http://localhost:5173/reminders
 Thank you,
 PillSync Team
 """,
-                from_email=settings.EMAIL_HOST_USER,
-                recipient_list=[user.email],
-                fail_silently=False,
+
+                    from_email=settings.EMAIL_HOST_USER,
+
+                    recipient_list=[
+                        user.email
+                    ],
+
+                    fail_silently=False,
+                )
+
+                print(
+                    "Reminder email sent successfully."
+                )
+
+            except Exception as e:
+                print(
+                    "Reminder Email Error:",
+                    str(e)
+                )
+
+        else:
+
+            print(
+                "Reminder email skipped because "
+                "notification settings are OFF."
             )
 
-            print("Reminder email sent successfully.")
+        # ==========================================
+        # REFILL / STOCK ALERT
+        # ==========================================
 
-        except Exception as e:
-            print("Email Error:", str(e))
+        if (
+            user.email_notifications
+            and user.medicine_alerts
+        ):
+            check_refill_alert(medicine)
 
-        # IMPORTANT:
-        # Do NOT reduce medicine quantity here.
-        # Quantity is reduced only when the user
-        # clicks the "Taken" button.
+        else:
 
-        check_refill_alert(medicine)
+            print(
+                "Medicine alert skipped because "
+                "notification settings are OFF."
+            )
 
     print("========== Scheduler Completed ==========")
 
+
+# ==================================================
+# REFILL ALERT
+# ==================================================
 
 def check_refill_alert(medicine):
 
     days_left = calculate_refill_days(medicine)
 
-    print("Remaining Quantity:", medicine.remaining_quantity)
-    print("Estimated Days Left:", days_left)
+    print(
+        "Remaining Quantity:",
+        medicine.remaining_quantity
+    )
+
+    print(
+        "Estimated Days Left:",
+        days_left
+    )
+
+    # ==========================================
+    # OUT OF STOCK
+    # ==========================================
 
     if medicine.remaining_quantity == 0:
 
         send_mail(
+
             subject="🚨 PillSync: Medicine Out of Stock",
+
             message=f"""
 Hello {medicine.user.first_name},
 
@@ -100,17 +156,30 @@ Please refill your medicine immediately.
 
 — PillSync Team
 """,
+
             from_email=settings.EMAIL_HOST_USER,
-            recipient_list=[medicine.user.email],
+
+            recipient_list=[
+                medicine.user.email
+            ],
+
             fail_silently=False,
         )
 
-        print("Out of stock email sent.")
+        print(
+            "Out of stock email sent."
+        )
+
+    # ==========================================
+    # LOW STOCK
+    # ==========================================
 
     elif days_left <= 5:
 
         send_mail(
+
             subject="💊 PillSync Refill Alert",
+
             message=f"""
 Hello {medicine.user.first_name},
 
@@ -126,9 +195,16 @@ Please arrange a refill before your medicine runs out.
 
 — PillSync Team
 """,
+
             from_email=settings.EMAIL_HOST_USER,
-            recipient_list=[medicine.user.email],
+
+            recipient_list=[
+                medicine.user.email
+            ],
+
             fail_silently=False,
         )
 
-        print("Refill alert email sent.")
+        print(
+            "Refill alert email sent."
+        )

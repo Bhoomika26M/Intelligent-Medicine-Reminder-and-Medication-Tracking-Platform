@@ -13,9 +13,29 @@ from .views import (
     reset_password,
 )
 
+from .settings_views import UserSettingsView
+
+
 urlpatterns = [
-    path("register/", RegisterView.as_view(), name="register"),
-    path("profile/", ProfileView.as_view(), name="profile"),
+    # ==========================================
+    # USER
+    # ==========================================
+
+    path(
+        "register/",
+        RegisterView.as_view(),
+        name="register",
+    ),
+
+    path(
+        "profile/",
+        ProfileView.as_view(),
+        name="profile",
+    ),
+
+    # ==========================================
+    # DASHBOARDS
+    # ==========================================
 
     path(
         "patient-dashboard/",
@@ -35,16 +55,14 @@ urlpatterns = [
         name="admin-dashboard",
     ),
 
+    # ==========================================
+    # PASSWORD
+    # ==========================================
+
     path(
         "change-password/",
         ChangePasswordView.as_view(),
         name="change-password",
-    ),
-
-    path(
-        "google-login/",
-        google_login,
-        name="google_login",
     ),
 
     path(
@@ -63,5 +81,25 @@ urlpatterns = [
         "reset-password/",
         reset_password,
         name="reset_password",
+    ),
+
+    # ==========================================
+    # GOOGLE LOGIN
+    # ==========================================
+
+    path(
+        "google-login/",
+        google_login,
+        name="google_login",
+    ),
+
+    # ==========================================
+    # SETTINGS
+    # ==========================================
+
+    path(
+        "settings/",
+        UserSettingsView.as_view(),
+        name="user-settings",
     ),
 ]
